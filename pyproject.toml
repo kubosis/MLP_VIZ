@@ -14,8 +14,8 @@ requires-python = ">=3.10"
 keywords = []
 dynamic = ["dependencies"]
 authors = [
-    [{ "name"=JakubKolar, "email"="" } ,
-{ "name"=JakubSukdol, "email"="" } ],
+    [{ "name"="Jakub Kolar", "email"="" } ,
+{ "name"="Jakub Sukdol", "email"="" } ],
 ]
 
 classifiers = [
