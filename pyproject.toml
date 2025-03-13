@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+
+build-backend = "setuptools.build_meta"
+[tool.setuptools.packages]
+find = {}
+
+[project]
+name = "mlp_visualizer"
+version = "0.0.1-pre-alpha"
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = []
+dynamic = ["dependencies"]
+authors = [
+    [{ "name"=JakubKolar, "email"="" } ,
+{ "name"=JakubSukdol, "email"="" } ],
+]
+
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Programming Language :: Python",
+]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools]
+include-package-data = true
+
+
