@@ -1,4 +1,4 @@
 # mlp_visualizer
-Created by JakubKolar, JakubSukdol on 13.03.2025
+Created by Jakub Kolar, Jakub Sukdol on 13.03.2025
 
-#### REQUIRES PYTHON 3.11
+#### REQUIRES PYTHON 3.10
