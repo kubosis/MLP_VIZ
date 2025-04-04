@@ -23,7 +23,6 @@ def try_convert(v: str, arr_type: list[Type]) -> Any:
             continue
     return v
 
-
 def _parse_module_str(module_str: str) -> tuple[str, dict]:
     module_specs = split_by_all([module_str], "(),")
     spec_dict = {}
@@ -90,6 +89,10 @@ class ModelCollector(nn.Module):
         """
         return self._state_dict
 
+    def pretty_print(self):
+        formatted_json = json.dumps(self._state_dict, indent=4, separators=(",", ": "))
+        print(formatted_json)
+
     def dump_to_json(self, json_path: str):
         with open(json_path, "w") as f:
             json.dump(self._state_dict, f, indent=4, separators=(",", ": "))
@@ -112,6 +115,5 @@ if __name__ == '__main__':
         loss = torch.nn.functional.cross_entropy(y, gold)
         loss.backward()
 
-    print(collector.get_collected_data())
+    collector.pretty_print()
     collector.dump_to_json("./example.json")
-
