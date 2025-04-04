@@ -39,7 +39,8 @@ def _parse_module_str(module_str: str) -> tuple[str, dict]:
 class ModelCollector(nn.Module):
     def __init__(self, model: nn.Module):
         super(ModelCollector, self).__init__()
-        self._model = nn.Sequential(model, nn.Identity())
+        # add dummy identities to make it easier to collect inputs and gradients with hooks
+        self._model = nn.Sequential(nn.Identity(), model, nn.Identity())
         self._state_dict: dict[int | str, dict[str, dict]] = defaultdict(lambda: defaultdict(dict))
         self._pass_no = 0
         self._register_hooks()
@@ -71,14 +72,14 @@ class ModelCollector(nn.Module):
 
     def _capture_gradients(self):
         def hook(module, grad_input, grad_output):
-            self._state_dict[self._pass_no][module.tag]['grad_output'] = to_list(grad_output[0])
+            self._state_dict[self._pass_no][module.tag]['grad_input'] = to_list(torch.mean(grad_input[0], dim=0, keepdim=False))
             for pname, param in module.named_parameters():
                 self._state_dict[self._pass_no][module.tag][f"grad_{pname}"] = to_list(param)
         return hook
 
     def _capture_params(self):
         def hook(module, input_, res):
-            self._state_dict[self._pass_no][module.tag]['input'] = to_list(input_[0])
+            self._state_dict[self._pass_no][module.tag]['input'] = to_list(input_[0].mean(dim=0, keepdim=False))
             for pname, param in module.named_parameters():
                 self._state_dict[self._pass_no][module.tag][pname] = to_list(param)
         return hook
@@ -95,6 +96,7 @@ class ModelCollector(nn.Module):
 
 
 if __name__ == '__main__':
+    # driver code
     model = nn.Sequential(
         nn.Linear(5, 5),
         nn.ReLU(),
