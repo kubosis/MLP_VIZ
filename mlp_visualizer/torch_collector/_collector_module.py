@@ -1,15 +1,63 @@
-from typing import Any, Tuple, Dict
+from typing import Any, Type
+from collections import defaultdict
+import json
+from itertools import chain
 
 import torch
 import torch.nn as nn
+
+def to_list(tensor: torch.Tensor) -> list:
+    return tensor.detach().cpu().numpy().tolist()
+
+def split_by_all(arr_of_strings: list[str], split_by: str, i: int=0):
+    if i == len(split_by):
+        return arr_of_strings
+    l = list(chain.from_iterable(list(map(lambda x: x.split(split_by[i]), arr_of_strings))))
+    return split_by_all(l, split_by, i + 1)
+
+def try_convert(v: str, arr_type: list[Type]) -> Any:
+    for type_ in arr_type:
+        try:
+            return type_(v)
+        except ValueError:
+            continue
+    return v
+
+
+def _parse_module_str(module_str: str) -> tuple[str, dict]:
+    module_specs = split_by_all([module_str], "(),")
+    spec_dict = {}
+    for spec in module_specs[1:]:
+        if not spec:
+            continue
+        if '=' in spec:
+            k, v = spec.split('=')
+            spec_dict[k] = try_convert(v, [float, bool])
+    return module_specs[0], spec_dict
 
 
 class ModelCollector(nn.Module):
     def __init__(self, model: nn.Module):
         super(ModelCollector, self).__init__()
-        self._model = model
-        self._state_dict: Dict[str, Any] = {}  # Store weights and gradients
+        self._model = nn.Sequential(model, nn.Identity())
+        self._state_dict: dict[int | str, dict[str, dict]] = defaultdict(lambda: defaultdict(dict))
         self._pass_no = 0
+        self._register_hooks()
+
+    def _register_hooks(self):
+        reg_mod_count = 1
+        for i, module in enumerate(self._model.modules()):
+            if isinstance(module, nn.Sequential) or isinstance(module, nn.ModuleList):
+                continue
+            module_name, module_specs = _parse_module_str(str(module))
+            module.tag = f"{reg_mod_count}_{module_name}"
+            self._state_dict["architecture"][module.tag] = module_specs
+            reg_mod_count += 1
+            module.register_forward_hook(self._capture_params())
+            module.register_full_backward_hook(self._capture_gradients())
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
 
     def forward(self, *args, **kwargs) -> torch.Tensor:
         """
@@ -17,7 +65,23 @@ class ModelCollector(nn.Module):
         collects weights and gradients for later visualization.
         """
         self._pass_no += 1
-        return CollectorFunction.apply(self, *args, **kwargs)
+        output = self._model(*args, **kwargs)
+
+        return output
+
+    def _capture_gradients(self):
+        def hook(module, grad_input, grad_output):
+            self._state_dict[self._pass_no][module.tag]['grad_output'] = to_list(grad_output[0])
+            for pname, param in module.named_parameters():
+                self._state_dict[self._pass_no][module.tag][f"grad_{pname}"] = to_list(param)
+        return hook
+
+    def _capture_params(self):
+        def hook(module, input_, res):
+            self._state_dict[self._pass_no][module.tag]['input'] = to_list(input_[0])
+            for pname, param in module.named_parameters():
+                self._state_dict[self._pass_no][module.tag][pname] = to_list(param)
+        return hook
 
     def get_collected_data(self):
         """
@@ -25,49 +89,27 @@ class ModelCollector(nn.Module):
         """
         return self._state_dict
 
-class CollectorFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, model: ModelCollector, *args, **kwargs):
-        """
-        Custom autograd function to collect forward weights.
-        """
-        ctx.model = model._model  # Save model reference for backward pass
-        ctx.state_dict = model._state_dict
-        ctx.pass_no = model._pass_no
-        ctx.save_for_backward(*args)  # Save inputs for later
+    def dump_to_json(self, json_path: str):
+        with open(json_path, "w") as f:
+            json.dump(self._state_dict, f, indent=4, separators=(",", ": "))
 
-        # Forward pass through the model
-        output = model(*args, **kwargs)
 
-        # Collect and store weights of Linear layers
-        for name, module in model.named_modules():
-            if isinstance(module, nn.Linear):
-                model._state_dict[name] = {
-                    "weights": module.weight.detach().clone(),
-                    "bias": module.bias.detach().clone() if module.bias is not None else None,
-                }
+if __name__ == '__main__':
+    model = nn.Sequential(
+        nn.Linear(5, 5),
+        nn.ReLU(),
+        nn.Linear(5, 5),
+        nn.ReLU(),
+        nn.Linear(5, 2),
+    )
+    collector = ModelCollector(model)
 
-        return output
+    for i in range(2):
+        y = collector.forward(torch.randn(5, 5, requires_grad=True))
+        gold = torch.randn(5, 2, requires_grad=True)
+        loss = torch.nn.functional.cross_entropy(y, gold)
+        loss.backward()
 
-    @staticmethod
-    def backward(ctx, grad_output):
-        """
-        Custom backward function to collect gradients.
-        """
-        model = ctx.model  # Retrieve model reference
-        state = ctx.state_dict
-        pass_no = ctx.pass_no
-
-        state[pass_no] = {}
-
-        # Collect gradients of Linear layers
-        for name, module in model.named_modules():
-            if isinstance(module, nn.Linear) and module.weight.grad is not None:
-                state[pass_no][name] = {}
-                state[pass_no][name]["grad_weights"] = module.weight.grad.clone()
-                if module.bias is not None and module.bias.grad is not None:
-                    state[pass_no][name]["grad_bias"] = module.bias.grad.clone()
-
-        return (None, *grad_output)  # First output is None since we don’t need gradients for the model itself
-
+    print(collector.get_collected_data())
+    collector.dump_to_json("./example.json")
 
