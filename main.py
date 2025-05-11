@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-import torchmetrics
+from torchmetrics import Accuracy
 import os
 
 from mlp_visualizer import ModelCollector, visualize_mlp
@@ -54,7 +54,7 @@ class CNN(nn.Module):
         self.conv2 = nn.Conv2d(8, 16, kernel_size=3, padding=1)
         self.conv3 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
         self.conv4 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(64 *3*3, 24)
+        self.fc1 = nn.Linear(64 * 3*3, 24)
         self.fc2 = nn.Linear(24, 24)
         self.fc3 = nn.Linear(24, 24)
         self.fc4 = nn.Linear(24, 24)
@@ -84,8 +84,8 @@ class CNN(nn.Module):
 
 def train_and_collect(batch_size=64, epochs=1,
                       lr=0.002, seed=1,
-                      data_collection_interval=50, num_collections=5, path="./collection.json",
-                      model=None, cap=48):
+                      data_collection_interval=50, num_collections=-1, path="./collection.json",
+                      model=None, neuron_cap=48):
     """
     Train a CNN model on MNIST and collect data at specified intervals.
 
@@ -97,11 +97,13 @@ def train_and_collect(batch_size=64, epochs=1,
         data_collection_interval: Collect data every N batches
         num_collections: Number of data collections to make, -1 to collect until the end
     """
+    if os.path.exists(path):
+        print(f"File {path} already exists. Please remove it before running the script.")
+        return
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    print(f"Using seed: {seed}")
+    print(f"Training model on {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'} with seed {seed}")
 
     # MNIST dataset transformation
     transform = transforms.Compose([
@@ -126,9 +128,9 @@ def train_and_collect(batch_size=64, epochs=1,
     # Training loop
     collections_made = 0
     batch_count = 0
-    collector = ModelCollector(model, cap)
+    collector = ModelCollector(model, neuron_cap)
 
-    acc= torchmetrics.Accuracy("multiclass", num_classes=10).to(device)
+    acc = Accuracy("multiclass", num_classes=10).to(device)
 
     for epoch in range(epochs):
         model.train()
@@ -164,17 +166,11 @@ def train_and_collect(batch_size=64, epochs=1,
                 prediction = output.argmax(dim=1).item()
                 collector.register_value("prediction", prediction)
                 collector.register_value("logits", output[0])
-                loss = F.cross_entropy(output, target)
-                prediction = output.argmax(dim=1, keepdim=False)
-                corr_pred = (prediction == target).sum().item()
-                total_pred = target.size(0)
-                print(f"correct predictions: {corr_pred}, total predictions: {total_pred}")
-                accuracy = corr_pred / total_pred if total_pred > 0 else 0.0
+                accuracy = acc.compute()
                 collector.register_value("loss", loss.item())
                 collector.register_value("accuracy", accuracy)
                 print(f"Loss: {loss.item():.6f}, Accuracy: {accuracy:.2f}")
 
-                loss.backward()
                 model.train()
                 collections_made += 1
         acc.reset()
@@ -190,21 +186,12 @@ def visualize_collected_data(json_path):
     visualize_mlp(json_path)
 
 
-def train(path, model=None):
-    print("Training model and collecting data...")
-    train_and_collect(
-        batch_size=32,
-        epochs=1,
-        data_collection_interval=50,
-        num_collections=-1,
-        path=path,
-        model=model,
-        cap=24,
-    )
-
-
 if __name__ == "__main__":
     # Train the model and collect data
     path = './data/collections/mnist_collection.json'
-    train(path, model=CNN_large())
+    train_and_collect(path=path, model=CNN(), data_collection_interval=50)
+    visualize_collected_data(path)
+
+    path = './data/collections/mnist_collection_largeCNN.json'
+    train_and_collect(path=path, model=CNN_large(), data_collection_interval=20, neuron_cap=24)
     visualize_collected_data(path)

@@ -47,7 +47,7 @@ class ModelCollector(nn.Module):
         nn.Linear,
     ]
 
-    def __init__(self, model: nn.Module, cap_visualized_layer_size=48, register:Literal["forward", "backward", "both"]="forward"):
+    def __init__(self, model: nn.Module, cap_visualized_layer_size=48, register: Literal["forward", "backward", "both"] = "forward"):
         super(ModelCollector, self).__init__()
         # add dummy identities to make it easier to collect inputs and gradients with hooks
         self._model = nn.Sequential(nn.Identity(), model, nn.Identity())
@@ -170,7 +170,7 @@ class ModelCollector(nn.Module):
         with open(json_path, "w") as f:
             json.dump(self._state_dict, f, indent=4, separators=(",", ": "))
 
-    def register_value(self, name: str, value: Any, pass_no: int=-1):
+    def register_value(self, name: str, value: Any, pass_no: int = -1):
         """ registers value to the current pass in the state dict or to pass_no if specified """
         pass_no = pass_no if pass_no > 0 else self._pass_no
         self._state_dict[pass_no][name] = to_list(value) if isinstance(value, torch.Tensor) else value

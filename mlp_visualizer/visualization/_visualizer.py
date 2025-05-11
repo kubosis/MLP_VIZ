@@ -74,6 +74,7 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
             self.setPen(self.original_neuron_pen)
             self.setBrush(self.original_neuron_brush)
 
+
 def get_diverging_neuron_color(activation_value):
     """Maps an activation value to a diverging color scheme (blue-white-red)."""
     normalized_value = np.clip(activation_value, -1.0, 1.0)  # Clip to a reasonable range
@@ -94,6 +95,7 @@ def get_diverging_neuron_color(activation_value):
         alpha = 255
 
     return QColor(red, green, blue, alpha)
+
 
 class MLPVisualizer(QMainWindow):
     def __init__(self, json_data_path=None):
@@ -356,93 +358,93 @@ class MLPVisualizer(QMainWindow):
 
         if all_layers and self.current_pass in self.data:
             if 'prediction' in self.data[self.current_pass] and 'logits' in self.data[self.current_pass]:
-                    prediction = self.data[self.current_pass]['prediction']
+                prediction = self.data[self.current_pass]['prediction']
 
-                    # --- Histogram Drawing ---
-                    # 1. Calculate Softmax probabilities
-                    logits = self.data[self.current_pass]['logits']
-                    logits_array = np.array(logits, dtype=np.float32)
-                    exp_logits = np.exp(logits_array - np.max(logits_array))  # Subtract max for numerical stability
-                    probabilities = exp_logits / np.sum(exp_logits)
+                # --- Histogram Drawing ---
+                # 1. Calculate Softmax probabilities
+                logits = self.data[self.current_pass]['logits']
+                logits_array = np.array(logits, dtype=np.float32)
+                exp_logits = np.exp(logits_array - np.max(logits_array))  # Subtract max for numerical stability
+                probabilities = exp_logits / np.sum(exp_logits)
 
-                    num_classes = len(probabilities)
-                    hist_bar_width = 20
-                    hist_bar_spacing = 5
-                    max_bar_pixel_height = 360  # Max height for a bar representing 1.0 probability
-                    hist_total_width = num_classes * hist_bar_width + (num_classes - 1) * hist_bar_spacing
-                    hist_start_x = x_output_area_center - (hist_total_width / 2)
-                    current_hist_x = int(hist_start_x)  # Initialize for the loop
+                num_classes = len(probabilities)
+                hist_bar_width = 20
+                hist_bar_spacing = 5
+                max_bar_pixel_height = 360  # Max height for a bar representing 1.0 probability
+                hist_total_width = num_classes * hist_bar_width + (num_classes - 1) * hist_bar_spacing
+                hist_start_x = x_output_area_center - (hist_total_width / 2)
+                current_hist_x = int(hist_start_x)  # Initialize for the loop
 
-                    # Y position for the baseline of the histogram bars
-                    y_hist_baseline = 250
+                # Y position for the baseline of the histogram bars
+                y_hist_baseline = 250
 
-                    hist_bar_font = QFont()
-                    hist_bar_font.setPointSize(8)
+                hist_bar_font = QFont()
+                hist_bar_font.setPointSize(8)
+
+                for i in range(num_classes):
+                    bar_height = probabilities[i] * max_bar_pixel_height
+
+                    # Bar
+                    bar = QGraphicsRectItem(current_hist_x,
+                                            y_hist_baseline - bar_height,
+                                            hist_bar_width,
+                                            bar_height)
+                    bar_color = QColor(Qt.GlobalColor.blue)
+                    if i == prediction:
+                        bar_color = QColor(Qt.GlobalColor.green)  # Highlight predicted bar
+                    bar.setBrush(QBrush(bar_color))
+                    bar.setPen(QPen(Qt.GlobalColor.black, 0.5))  # Thin border
+                    self.scene.addItem(bar)
+
+                    # Label for the bar (class index)
+                    label = QGraphicsTextItem(str(i))
+                    label.setFont(hist_bar_font)
+                    label_x_pos = current_hist_x + hist_bar_width / 2 - label.boundingRect().width() / 2
+                    label_y_pos = y_hist_baseline + 2  # Just below the baseline
+                    label.setPos(label_x_pos, label_y_pos)
+                    self.scene.addItem(label)
+
+                    current_hist_x += hist_bar_width + hist_bar_spacing
+
+                # --- Lines from last neurons to histogram bars ---
+                if neurons and neurons[-1] and len(neurons[-1]) == num_classes:
+                    last_layer_neurons = neurons[-1]
+                    line_pen = QPen(QColor(Qt.GlobalColor.gray), 1, Qt.PenStyle.DashLine)  # Dashed gray line
+                    line_pen.setDashPattern([4, 2])  # Define dash pattern: 4px line, 2px gap
 
                     for i in range(num_classes):
-                        bar_height = probabilities[i] * max_bar_pixel_height
+                        if i < len(last_layer_neurons):  # Safety check
+                            neuron_item, neuron_center_pos = last_layer_neurons[i]
 
-                        # Bar
-                        bar = QGraphicsRectItem(current_hist_x,
-                                                y_hist_baseline - bar_height,
-                                                hist_bar_width,
-                                                bar_height)
-                        bar_color = QColor(Qt.GlobalColor.blue)
-                        if i == prediction:
-                            bar_color = QColor(Qt.GlobalColor.green)  # Highlight predicted bar
-                        bar.setBrush(QBrush(bar_color))
-                        bar.setPen(QPen(Qt.GlobalColor.black, 0.5))  # Thin border
-                        self.scene.addItem(bar)
+                            # Target X for the line: center of the i-th histogram bar
+                            target_x = hist_start_x + \
+                                (i * (hist_bar_width + hist_bar_spacing)) + (hist_bar_width / 2)
+                            # Target Y for the line: slightly above the histogram baseline
+                            target_y = y_hist_baseline - 5  # Adjust this offset as needed
 
-                        # Label for the bar (class index)
-                        label = QGraphicsTextItem(str(i))
-                        label.setFont(hist_bar_font)
-                        label_x_pos = current_hist_x + hist_bar_width / 2 - label.boundingRect().width() / 2
-                        label_y_pos = y_hist_baseline + 2  # Just below the baseline
-                        label.setPos(label_x_pos, label_y_pos)
-                        self.scene.addItem(label)
+                            line = QGraphicsLineItem(neuron_center_pos.x(), neuron_center_pos.y(),
+                                                     target_x, target_y)
+                            line.setPen(line_pen)
+                            line.setZValue(-0.5)  # Behind histogram bars but above main connections
+                            self.scene.addItem(line)
 
-                        current_hist_x += hist_bar_width + hist_bar_spacing
+                # --- Prediction Text (position below histogram) ---
+                prediction_text_content = f"Prediction: {prediction}"
+                prediction_text_item = QGraphicsTextItem(
+                    prediction_text_content)  # Create item to measure its width
+                pred_font = QFont()
+                pred_font.setBold(True)
+                pred_font.setPointSize(12)
+                prediction_text_item.setFont(pred_font)
+                prediction_text_item.setDefaultTextColor(QColor(Qt.GlobalColor.black))
 
-                    # --- Lines from last neurons to histogram bars ---
-                    if neurons and neurons[-1] and len(neurons[-1]) == num_classes:
-                        last_layer_neurons = neurons[-1]
-                        line_pen = QPen(QColor(Qt.GlobalColor.gray), 1, Qt.PenStyle.DashLine)  # Dashed gray line
-                        line_pen.setDashPattern([4, 2])  # Define dash pattern: 4px line, 2px gap
+                y_pred_text = y_hist_baseline + 2 + QGraphicsTextItem(str(0)).boundingRect().height() + 10
 
-                        for i in range(num_classes):
-                            if i < len(last_layer_neurons):  # Safety check
-                                neuron_item, neuron_center_pos = last_layer_neurons[i]
+                # Calculate starting X for prediction text so it's centered around x_output_area_center
+                pred_text_start_x = x_output_area_center - (prediction_text_item.boundingRect().width() / 2)
 
-                                # Target X for the line: center of the i-th histogram bar
-                                target_x = hist_start_x + \
-                                    (i * (hist_bar_width + hist_bar_spacing)) + (hist_bar_width / 2)
-                                # Target Y for the line: slightly above the histogram baseline
-                                target_y = y_hist_baseline - 5  # Adjust this offset as needed
-
-                                line = QGraphicsLineItem(neuron_center_pos.x(), neuron_center_pos.y(),
-                                                         target_x, target_y)
-                                line.setPen(line_pen)
-                                line.setZValue(-0.5)  # Behind histogram bars but above main connections
-                                self.scene.addItem(line)
-
-                    # --- Prediction Text (position below histogram) ---
-                    prediction_text_content = f"Prediction: {prediction}"
-                    prediction_text_item = QGraphicsTextItem(
-                        prediction_text_content)  # Create item to measure its width
-                    pred_font = QFont()
-                    pred_font.setBold(True)
-                    pred_font.setPointSize(12)
-                    prediction_text_item.setFont(pred_font)
-                    prediction_text_item.setDefaultTextColor(QColor(Qt.GlobalColor.black))
-
-                    y_pred_text = y_hist_baseline + 2 + QGraphicsTextItem(str(0)).boundingRect().height() + 10
-
-                    # Calculate starting X for prediction text so it's centered around x_output_area_center
-                    pred_text_start_x = x_output_area_center - (prediction_text_item.boundingRect().width() / 2)
-
-                    prediction_text_item.setPos(pred_text_start_x, y_pred_text)
-                    self.scene.addItem(prediction_text_item)
+                prediction_text_item.setPos(pred_text_start_x, y_pred_text)
+                self.scene.addItem(prediction_text_item)
             else:
                 print(
                     f"Final Identity layer tag not found or no data for it in pass {self.current_pass}. Searched for tag like '{final_identity_tag}'.")
