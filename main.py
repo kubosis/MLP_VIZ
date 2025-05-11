@@ -118,8 +118,17 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
 
                 output = collector(test_data, input=sample_image, label=label)
                 loss = F.cross_entropy(output, test_target)
-                loss.backward()
+                prediction = output.argmax(dim=1, keepdim=False)
+                corr_pred = (prediction == test_target).sum().item()
+                total_pred = test_target.size(0)
+                print(f"correct predictions: {corr_pred}, total predictions: {total_pred}")
+                accuracy = corr_pred / total_pred if total_pred > 0 else 0.0
+                pass_dict = collector.get_collected_data()[collector._pass_no]
+                pass_dict["loss"] = loss.item()
+                pass_dict["accuracy"] = accuracy
+                print(f"Loss: {loss.item():.6f}, Accuracy: {accuracy:.2f}")
 
+                loss.backward()
                 model.train()
                 collections_made += 1
 

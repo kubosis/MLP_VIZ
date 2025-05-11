@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphic
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap
+import pyqtgraph as pg
 import sys
 import json
 import numpy as np
@@ -32,12 +33,17 @@ class MLPVisualizer(QMainWindow):
         self.current_pass = "1"
         self.max_pass = 1
         self._initial_fit_done = False
+        self.all_metrics_data = []  # Stores tuples: (pass_num, loss, accuracy)
+        self.loss_plot_item = None
+        self.accuracy_plot_item = None
+        self.plot_widget = None
         self.setup_ui()
 
         # Load data if path is provided
         if json_data_path:
             self.load_data(json_data_path)
             self.visualize_network(preserve_current_view=False)
+            self.update_plot()
 
     def setup_ui(self):
         """Set up the UI components."""
@@ -70,7 +76,7 @@ class MLPVisualizer(QMainWindow):
         self.controls_layout.addWidget(QPushButton("Zoom In", clicked=self.zoom_in))
         self.controls_layout.addStretch(1)
 
-        # Content layout )
+        # Content layout
         self.content_layout = QHBoxLayout()
         self.main_layout.addLayout(self.content_layout)
 
@@ -82,12 +88,28 @@ class MLPVisualizer(QMainWindow):
 
         # Scene and view setup
         self.scene = QGraphicsScene()
-        self.scene.setBackgroundBrush(QBrush(Qt.GlobalColor.white))
+        self.scene.setBackgroundBrush(QBrush(Qt.GlobalColor.darkGray))
         self.view = ZoomableGraphicsView(self.scene)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.view.setViewport(QOpenGLWidget())
         self.content_layout.addWidget(self.view)
+
+        # Plot Panel (bottom)
+        plot_panel_container = QWidget()  # Use a container for better sizing control if needed
+        self.plot_panel_layout = QVBoxLayout(plot_panel_container)
+        self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setTitle("Training Metrics", color="k", size="12pt")
+        self.plot_widget.setLabel('left', 'Value', color='k')
+        self.plot_widget.setLabel('bottom', 'Pass Number', color='k')
+        self.plot_widget.addLegend(offset=(-10, 10))  # Adjust legend position
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+
+        self.loss_plot_item = self.plot_widget.plot(pen=pg.mkPen(color=(255, 0, 0), width=2), name="Loss")
+        self.accuracy_plot_item = self.plot_widget.plot(pen=pg.mkPen(color=(0, 0, 255), width=2), name="Accuracy")
+        self.plot_panel_layout.addWidget(self.plot_widget)
+        plot_panel_container.setMaximumHeight(250)  # Set min height for the plot area
+        self.main_layout.addWidget(plot_panel_container, stretch=1)
 
     def load_data(self, json_path):
         """Load the collected MLP data from a JSON file."""
@@ -103,6 +125,18 @@ class MLPVisualizer(QMainWindow):
                 self.pass_slider.setValue(1)
                 self.current_pass = "1"
                 self.pass_display_label.setText(f"Pass: {self.current_pass}/{self.max_pass}")
+
+                for pass_num_int in numeric_passes:
+                    pass_num_str = str(pass_num_int)
+                    pass_data_dict = self.data.get(pass_num_str, {})
+                    loss = pass_data_dict.get("loss")
+                    accuracy = pass_data_dict.get("accuracy")
+
+                    # Ensure values are valid numbers before appending
+                    if isinstance(loss, (int, float)) and isinstance(accuracy, (int, float)):
+                        self.all_metrics_data.append((pass_num_int, float(loss), float(accuracy)))
+
+                self.all_metrics_data.sort(key=lambda x: x[0])
             else:  # No numeric passes found
                 self.max_pass = 1
                 self.current_pass = "1"
@@ -118,11 +152,40 @@ class MLPVisualizer(QMainWindow):
             self.pass_slider.setValue(1)
             self.pass_display_label.setText("Pass: N/A")
 
+    def update_plot(self):
+        if not hasattr(self, 'plot_widget') or self.plot_widget is None:  # Check if UI setup
+            return
+        if not self.all_metrics_data:
+            if self.loss_plot_item:
+                self.loss_plot_item.setData([], [])
+            if self.accuracy_plot_item:
+                self.accuracy_plot_item.setData([], [])
+            return
+
+        current_pass_int = int(self.current_pass)
+        plot_data_tuples = [item for item in self.all_metrics_data if item[0] <= current_pass_int]
+
+        if not plot_data_tuples:
+            if self.loss_plot_item:
+                self.loss_plot_item.setData([], [])
+            if self.accuracy_plot_item:
+                self.accuracy_plot_item.setData([], [])
+            return
+
+        passes = [item[0] for item in plot_data_tuples]
+        losses = [item[1] for item in plot_data_tuples]
+        accuracies = [item[2] for item in plot_data_tuples]
+
+        self.loss_plot_item.setData(passes, losses)
+        self.accuracy_plot_item.setData(passes, accuracies)
+        # self.plot_widget.autoRange() # pyqtgraph usually autoranges by default
+
     def change_pass(self, pass_value):
         """Change the visualization to show a different pass."""
         self.current_pass = str(pass_value)
         self.pass_display_label.setText(f"Pass: {self.current_pass}/{self.max_pass}")
         self.visualize_network(preserve_current_view=self._initial_fit_done)
+        self.update_plot()
 
     def zoom_in(self):
         """Zoom in the view."""
@@ -261,7 +324,7 @@ class MLPVisualizer(QMainWindow):
                         self.scene.addItem(label)
 
                         current_hist_x += hist_bar_width + hist_bar_spacing
-                        
+
                     # --- Lines from last neurons to histogram bars ---
                     if neurons and neurons[-1] and len(neurons[-1]) == num_classes:
                         last_layer_neurons = neurons[-1]
