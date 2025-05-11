@@ -435,7 +435,7 @@ class MLPVisualizer(QMainWindow):
                                 self.scene.addItem(line)
 
                     # --- Prediction Text (position below histogram) ---
-                    prediction_text_content = f"Prediction: {prediction}"
+                    prediction_text_content = f"Prediction: {self.data[self.current_pass]['label']}"
                     prediction_text_item = QGraphicsTextItem(
                         prediction_text_content)  # Create item to measure its width
                     pred_font = QFont()
@@ -663,30 +663,60 @@ class MLPVisualizer(QMainWindow):
                 self.scene.addItem(label)
 
     def visualize_input_image(self):
-        """Visualize the input image as grayscale."""
+        """Visualize the input image, supporting both grayscale and RGB."""
         if not self.data or self.current_pass not in self.data:
             return
 
         image_data = self.data[self.current_pass].get("input")
-        if not image_data:
+        if image_data is None:
             return
 
-        # Convert to normalized grayscale image
-        image_array = np.array(image_data, dtype=np.float32)
-        min_val = image_array.min()
-        max_val = image_array.max()
-        range_val = max_val - min_val
+        image_array_float = np.array(image_data, dtype=np.float32)
 
-        if range_val != 0:
-            image_array = (image_array - min_val) / range_val
+        min_val = image_array_float.min()
+        max_val = image_array_float.max()
+
+        # Shift and scale to [0, 255]
+        if min_val < 0:
+            # Example: If data is in [-1, 1], shift to [0, 2] then scale to [0, 255]
+            image_array_shifted = (image_array_float + abs(min_val))
+            max_val_shifted = max_val + abs(min_val)
+            if max_val_shifted != 0:
+                image_array_normalized = (image_array_shifted / max_val_shifted) * 255
+            else:
+                image_array_normalized = np.zeros_like(image_array_float)
+            image_array = image_array_normalized.astype(np.uint8)
         else:
-            image_array = np.zeros_like(image_array)
+            # If no negative values, proceed with the original normalization
+            range_val = max_val - min_val
+            if range_val != 0:
+                image_array = ((image_array_float - min_val) / range_val) * 255
+            else:
+                image_array = np.zeros_like(image_array_float)
+            image_array = image_array.astype(np.uint8)
 
-        image_array = (image_array * 255).astype(np.uint8)
+        # Handle grayscale or RGB based on the first dimension (channels)
+        if image_array.ndim == 2:
+            h, w = image_array.shape
+            qimage = QImage(image_array.data.tobytes(), w, h, w, QImage.Format.Format_Grayscale8)
+        elif image_array.ndim == 3:
+            channels = image_array.shape[0]
+            if channels == 1:
+                image_array = image_array[0]
+                h, w = image_array.shape
+                qimage = QImage(image_array.data.tobytes(), w, h, w, QImage.Format.Format_Grayscale8)
+            elif channels == 3:
+                image_array = np.transpose(image_array, (1, 2, 0))
+                h, w, _ = image_array.shape
+                qimage = QImage(image_array.data.tobytes(), w, h, 3 * w, QImage.Format.Format_RGB888)
+            else:
+                print(f"Unsupported number of channels: {channels}")
+                return
+        else:
+            print(f"Unsupported image shape: {image_array.shape}")
+            return
 
-        # Create and display image
-        h, w = image_array.shape[1:]
-        qimage = QImage(image_array.data, w, h, w, QImage.Format.Format_Grayscale8)
+        # Show image
         self.image_label.setPixmap(QPixmap.fromImage(qimage).scaled(
             200, 200, Qt.AspectRatioMode.KeepAspectRatio))
 

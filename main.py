@@ -10,6 +10,69 @@ import os
 from mlp_visualizer import ModelCollector, visualize_mlp
 
 
+class ImageClassificationBase(nn.Module):
+    def training_step(self, batch):
+        images, labels = batch
+        out = self(images)  # Generate predictions
+        loss = F.cross_entropy(out, labels)  # Calculate loss
+        return loss
+
+    def validation_step(self, batch):
+        images, labels = batch
+        out = self(images)  # Generate predictions
+        loss = F.cross_entropy(out, labels)  # Calculate loss
+        acc = accuracy(out, labels)  # Calculate accuracy
+        return {'val_loss': loss.detach(), 'val_acc': acc}
+
+    def validation_epoch_end(self, outputs):
+        batch_losses = [x['val_loss'] for x in outputs]
+        epoch_loss = torch.stack(batch_losses).mean()  # Combine losses
+        batch_accs = [x['val_acc'] for x in outputs]
+        epoch_acc = torch.stack(batch_accs).mean()  # Combine accuracies
+        return {'val_loss': epoch_loss.item(), 'val_acc': epoch_acc.item()}
+
+    def epoch_end(self, epoch, result):
+        print("Epoch [{}], train_loss: {:.4f}, val_loss: {:.4f}, val_acc: {:.4f}".format(
+            epoch, result['train_loss'], result['val_loss'], result['val_acc']))
+
+
+def accuracy(outputs, labels):
+    _, preds = torch.max(outputs, dim=1)
+    return torch.tensor(torch.sum(preds == labels).item() / len(preds))
+
+class Cifar10CnnModel(ImageClassificationBase):
+    def __init__(self):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 64 x 16 x 16
+
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 128 x 8 x 8
+
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 256 x 4 x 4
+
+            nn.Flatten(),
+            nn.Linear(256 * 4 * 4, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, 10))
+
+    def forward(self, xb):
+        return self.network(xb)
+
+
 class CNN_large(nn.Module):
     def __init__(self):
         super(CNN_large, self).__init__()
@@ -82,7 +145,7 @@ class CNN(nn.Module):
         return x
 
 
-def train_and_collect(batch_size=64, epochs=1,
+def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
                       lr=0.002, seed=1,
                       data_collection_interval=50, num_collections=5, path="./collection.json",
                       model=None, cap=48):
@@ -102,15 +165,6 @@ def train_and_collect(batch_size=64, epochs=1,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     print(f"Using seed: {seed}")
-
-    # MNIST dataset transformation
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1310,), (0.3085,))
-    ])
-
-    train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
-    test_dataset = datasets.MNIST('./data', train=False, transform=transform)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=1)
@@ -162,7 +216,9 @@ def train_and_collect(batch_size=64, epochs=1,
                 target = torch.tensor(target, dtype=torch.int64, device=device)
                 output = collector(sample_image, input=sample_image[0])
                 prediction = output.argmax(dim=1).item()
+                prediction_label = test_dataset.classes[prediction]
                 collector.register_value("prediction", prediction)
+                collector.register_value("label", prediction_label)
                 collector.register_value("logits", output[0])
                 loss = F.cross_entropy(output, target)
                 prediction = output.argmax(dim=1, keepdim=False)
@@ -190,21 +246,49 @@ def visualize_collected_data(json_path):
     visualize_mlp(json_path)
 
 
-def train(path, model=None):
+def train(path, train, test, model, epochs=1, batch_size=32, data_collection_interval=50, cap=24, num_collections=-1):
     print("Training model and collecting data...")
     train_and_collect(
-        batch_size=32,
-        epochs=1,
-        data_collection_interval=50,
-        num_collections=-1,
+        train,
+        test,
+        batch_size=batch_size,
+        epochs=epochs,
+        data_collection_interval=data_collection_interval,
+        num_collections=num_collections,
         path=path,
         model=model,
-        cap=24,
+        cap=cap,
     )
 
+def get_cifar():
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),  # random crop with padding
+        transforms.RandomHorizontalFlip(),  # random horizontal flip
+        transforms.ToTensor(),  # convert to tensor and scale to [0, 1]
+        transforms.Normalize((0.4914, 0.4822, 0.4465),  # mean
+                             (0.2023, 0.1994, 0.2010))  # std
+    ])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465),
+                             (0.2023, 0.1994, 0.2010))
+    ])
+    train = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+    test = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+    return train, test
+
+def get_mnist():
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1310,), (0.3085,))
+    ])
+    train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
+    test_dataset = datasets.MNIST('./data', train=False, transform=transform)
+    return train_dataset, test_dataset
 
 if __name__ == "__main__":
     # Train the model and collect data
-    path = './data/collections/mnist_collection.json'
-    #train(path, model=CNN_large())
+    path = './data/collections/cifar10_collection.json'
+    train_dataset, test_dataset = get_cifar()
+    train(path, train_dataset, test_dataset, Cifar10CnnModel(), epochs=5)
     visualize_collected_data(path)
