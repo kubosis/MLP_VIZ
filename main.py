@@ -8,6 +8,7 @@ import os
 
 from mlp_visualizer import ModelCollector, visualize_mlp
 
+
 class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
@@ -39,6 +40,7 @@ class CNN(nn.Module):
         x = self.fc5(x)
         return x
 
+
 def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
                       lr=0.001, seed=1,
                       data_collection_interval=50, num_collections=5, path="./collection.json"):
@@ -55,6 +57,10 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
         num_collections: Number of data collections to make, -1 to collect until the end
     """
     torch.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {torch.device('cuda' if torch.cuda.is_available() else 'cpu')}")
+    print(f"Using seed: {seed}")
 
     # MNIST dataset transformation
     transform = transforms.Compose([
@@ -120,17 +126,19 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
 def visualize_collected_data(json_path):
     visualize_mlp(json_path)
 
+
 def train(path):
     train_and_collect(
-            batch_size=64,
-            epochs=1,
-            data_collection_interval=50,
-            num_collections=-1,
-            path=path
-        )
+        batch_size=64,
+        epochs=1,
+        data_collection_interval=50,
+        num_collections=-1,
+        path=path
+    )
+
 
 if __name__ == "__main__":
     # Train the model and collect data
-    path=f'./data/collections/mnist_collection.json'
+    path = f'./data/collections/mnist_collection.json'
     train(path)
     visualize_collected_data(path)

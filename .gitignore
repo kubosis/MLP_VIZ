@@ -106,3 +106,5 @@ ENV/
 .mypy_cache/
 
 
+/.conda
+mlp_visualizer/torch_collector/example.json

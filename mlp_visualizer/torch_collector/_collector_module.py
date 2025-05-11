@@ -6,14 +6,19 @@ from itertools import chain
 import torch
 import torch.nn as nn
 
-def to_list(tensor: torch.Tensor) -> list:
-    return tensor.detach().cpu().numpy().tolist()
 
-def split_by_all(arr_of_strings: list[str], split_by: str, i: int=0):
+def to_list(tensor: Any) -> list:
+    # if isinstance(tensor, torch.Tensor):
+    return tensor.detach().cpu().numpy().tolist()
+    # return tensor
+
+
+def split_by_all(arr_of_strings: list[str], split_by: str, i: int = 0):
     if i == len(split_by):
         return arr_of_strings
     l = list(chain.from_iterable(list(map(lambda x: x.split(split_by[i]), arr_of_strings))))
     return split_by_all(l, split_by, i + 1)
+
 
 def try_convert(v: str, arr_type: list[Type]) -> Any:
     for type_ in arr_type:
@@ -22,6 +27,7 @@ def try_convert(v: str, arr_type: list[Type]) -> Any:
         except ValueError:
             continue
     return v
+
 
 def _parse_module_str(module_str: str) -> tuple[str, dict]:
     module_specs = split_by_all([module_str], "(),")
@@ -43,6 +49,7 @@ class ModelCollector(nn.Module):
         nn.Sigmoid,
         nn.Tanh
     ]
+
     def __init__(self, model: nn.Module):
         super(ModelCollector, self).__init__()
         # add dummy identities to make it easier to collect inputs and gradients with hooks
@@ -83,7 +90,8 @@ class ModelCollector(nn.Module):
 
     def _capture_gradients(self):
         def hook(module, grad_input, grad_output):
-            self._state_dict[self._pass_no][module.tag]['grad_input'] = to_list(torch.mean(grad_input[0], dim=0, keepdim=False))
+            self._state_dict[self._pass_no][module.tag]['grad_input'] = to_list(
+                torch.mean(grad_input[0], dim=0, keepdim=False))
             for pname, param in module.named_parameters():
                 self._state_dict[self._pass_no][module.tag][f"grad_{pname}"] = to_list(param)
         return hook
