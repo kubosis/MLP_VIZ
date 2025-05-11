@@ -36,6 +36,13 @@ def _parse_module_str(module_str: str) -> tuple[str, dict]:
 
 
 class ModelCollector(nn.Module):
+    _captured_instances = [
+        nn.Linear,
+        nn.ReLU,
+        nn.LeakyReLU,
+        nn.Sigmoid,
+        nn.Tanh
+    ]
     def __init__(self, model: nn.Module):
         super(ModelCollector, self).__init__()
         # add dummy identities to make it easier to collect inputs and gradients with hooks
@@ -53,8 +60,9 @@ class ModelCollector(nn.Module):
             module.tag = f"{reg_mod_count}_{module_name}"
             self._state_dict["architecture"][module.tag] = module_specs
             reg_mod_count += 1
-            module.register_forward_hook(self._capture_params())
-            module.register_full_backward_hook(self._capture_gradients())
+            if any([isinstance(module, cls) for cls in self._captured_instances]):
+                module.register_forward_hook(self._capture_params())
+                module.register_full_backward_hook(self._capture_gradients())
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
@@ -63,9 +71,13 @@ class ModelCollector(nn.Module):
         """
         Calls forward pass of the wrapped model,
         collects weights and gradients for later visualization.
+
+        kwargs are additional collected data like 'input'
         """
         self._pass_no += 1
-        output = self._model(*args, **kwargs)
+        for k, v in kwargs.items():
+            self._state_dict[self._pass_no][k] = to_list(v)
+        output = self._model(*args)
 
         return output
 
