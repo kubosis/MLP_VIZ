@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphic
                              QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem,
                              QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtCore import Qt, QPointF, pyqtSignal
+from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap
 import sys
 import json
@@ -61,6 +61,10 @@ class MLPVisualizer(QMainWindow):
         self.pass_slider.valueChanged.connect(self.change_pass)
         self.controls_layout.addWidget(self.pass_slider)
 
+        # Pass label
+        self.pass_display_label = QLabel("Pass: 1/1")  # Initial text
+        self.controls_layout.addWidget(self.pass_display_label)
+
         # Zoom buttons
         self.controls_layout.addWidget(QPushButton("Zoom Out", clicked=self.zoom_out))
         self.controls_layout.addWidget(QPushButton("Zoom In", clicked=self.zoom_in))
@@ -98,12 +102,26 @@ class MLPVisualizer(QMainWindow):
                 self.pass_slider.setMaximum(self.max_pass)
                 self.pass_slider.setValue(1)
                 self.current_pass = "1"
+                self.pass_display_label.setText(f"Pass: {self.current_pass}/{self.max_pass}")
+            else:  # No numeric passes found
+                self.max_pass = 1
+                self.current_pass = "1"
+                self.pass_slider.setMaximum(1)
+                self.pass_slider.setValue(1)
+                self.pass_display_label.setText("Pass: 1/1")
         except Exception as e:
             print(f"Error loading data: {e}")
+            self.data = None  # Ensure data is None if loading fails
+            self.max_pass = 1
+            self.current_pass = "1"
+            self.pass_slider.setMaximum(1)
+            self.pass_slider.setValue(1)
+            self.pass_display_label.setText("Pass: N/A")
 
     def change_pass(self, pass_value):
         """Change the visualization to show a different pass."""
         self.current_pass = str(pass_value)
+        self.pass_display_label.setText(f"Pass: {self.current_pass}/{self.max_pass}")
         self.visualize_network(preserve_current_view=self._initial_fit_done)
 
     def zoom_in(self):
@@ -153,17 +171,6 @@ class MLPVisualizer(QMainWindow):
 
         # Add layer labels
         self.add_layer_labels(all_layers, layer_spacing)
-
-        # Add pass title
-        title = QGraphicsTextItem(f"Pass {self.current_pass}")
-        title_font = QFont()
-        title_font.setBold(True)
-        title_font.setPointSize(14)
-        title.setFont(title_font)
-        title.setPos(10, 10)
-        # title.setPos(self.scene.sceneRect().left() + 10 if not self.scene.sceneRect().isEmpty() else 10,
-        #              self.scene.sceneRect().top() + 10 if not self.scene.sceneRect().isEmpty() else 10)
-        self.scene.addItem(title)
 
         # Adjust view
         current_items_rect = self.scene.itemsBoundingRect()
@@ -289,7 +296,7 @@ class MLPVisualizer(QMainWindow):
         label_offset = 10
 
         for i, (layer_key, _) in enumerate(all_layers):
-            if any(layer_type in layer_key for layer_type in [ "Linear", "ReLU", "tanh", "sigmoid"]):
+            if any(layer_type in layer_key for layer_type in ["Linear", "ReLU", "tanh", "sigmoid"]):
                 layer_key = layer_key.split("_")[1]
                 x = ind * layer_spacing + 125
                 y = layer_height + label_offset  # place below the layer
