@@ -466,8 +466,8 @@ class MLPVisualizer(QMainWindow):
                             # Determine line thickness and color based on weight
                             weight_abs = abs(weight)
                             thickness = max(1, min(5, weight_abs * 5))
-                            color = QColor(0, 0, 255, min(255, int(weight_abs * 200) + 50)) if weight >= 0 else QColor(
-                                255, 0, 0, min(255, int(weight_abs * 200) + 50))
+                            color = QColor(255, 0, 0, min(255, int(weight_abs * 200) + 50)) if weight >= 0 else QColor(
+                                0, 0, 255, min(255, int(weight_abs * 200) + 50))
 
                             # Draw connection line
                             start_point = neurons[i][from_idx][1]
@@ -532,8 +532,6 @@ class MLPVisualizer(QMainWindow):
     def resizeEvent(self, event):
         """Handle window resize events."""
         super().resizeEvent(event)
-        if self.data:
-            self.visualize_network(preserve_current_view=False)
 
 
 def visualize_mlp(json_path):
