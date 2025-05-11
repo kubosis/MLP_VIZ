@@ -237,7 +237,8 @@ if __name__ == "__main__":
 
     # Train and collect data
     if not os.path.exists(current_output_path):
-        train_and_collect(current_output_path, train_dataset, test_dataset, model, epochs, interval, neuron_cap)
+        train_and_collect(path=current_output_path, train_dataset=train_dataset,test_dataset=test_dataset,model=model,
+                          epochs=epochs, data_collection_interval=interval, neuron_cap=neuron_cap)
 
     # Visualize collected data
     visualize_collected_data(current_output_path)
