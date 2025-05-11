@@ -58,8 +58,8 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
     """
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
-    torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {torch.device('cuda' if torch.cuda.is_available() else 'cpu')}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     print(f"Using seed: {seed}")
 
     # MNIST dataset transformation
@@ -75,7 +75,7 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
     test_loader = DataLoader(test_dataset, batch_size=test_batch_size)
 
     # Create the CNN model
-    model = CNN()
+    model = CNN().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr)
 
     # Create data directory if it doesn't exist
@@ -89,6 +89,9 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             batch_count += 1
+
+            # Move data and target to the specified device
+            data, target = data.to(device), target.to(device)
 
             # Regular training step
             optimizer.zero_grad()
@@ -109,7 +112,9 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
                 print(f"\nCollecting data (collection {collections_made + 1}{'/' + str(num_collections) if num_collections > 0 else ''})..."
                       f"at step {batch_idx + 1}")
                 sample_image, label = test_dataset[collections_made]
+                sample_image = sample_image.to(device)
                 test_data, test_target = next(iter(test_loader))
+                test_data, test_target = test_data.to(device), test_target.to(device)
 
                 output = collector(test_data, input=sample_image, label=label)
                 loss = F.cross_entropy(output, test_target)
@@ -124,10 +129,12 @@ def train_and_collect(batch_size=64, test_batch_size=64, epochs=1,
 
 
 def visualize_collected_data(json_path):
+    print(f"Visualizing collected data from {json_path}...")
     visualize_mlp(json_path)
 
 
 def train(path):
+    print("Training model and collecting data...")
     train_and_collect(
         batch_size=64,
         epochs=1,
@@ -139,6 +146,6 @@ def train(path):
 
 if __name__ == "__main__":
     # Train the model and collect data
-    path = f'./data/collections/mnist_collection.json'
+    path = './data/collections/mnist_collection.json'
     train(path)
     visualize_collected_data(path)
