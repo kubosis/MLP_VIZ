@@ -76,7 +76,7 @@ class ModelCollector(nn.Module):
         """
         self._pass_no += 1
         for k, v in kwargs.items():
-            self._state_dict[self._pass_no][k] = to_list(v)
+            self._state_dict[self._pass_no][k] = to_list(v) if isinstance(v, torch.Tensor) else v
         output = self._model(*args)
 
         return output
