@@ -1,3 +1,5 @@
+import sys
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,6 +10,47 @@ from torchmetrics import Accuracy
 import os
 
 from mlp_visualizer import ModelCollector, visualize_mlp
+
+import argparse
+
+parser = argparse.ArgumentParser(description="Train and visualize neural network data.")
+parser.add_argument(
+    "--dataset",
+    choices=["mnist", "cifar10"],
+    default="mnist",
+    help="Choose the dataset to use.",
+)
+parser.add_argument(
+    "--model",
+    choices=["cnn", "cnn_large", "cifar10_cnn"],
+    default="cnn",
+    help="Choose the model architecture to use.",
+)
+parser.add_argument(
+    "--epochs",
+    type=int,
+    default=1,
+    help="Number of training epochs.",
+)
+parser.add_argument(
+    "--interval",
+    type=int,
+    default=50,
+    help="Data collection interval during training.",
+)
+parser.add_argument(
+    "--neuron_cap",
+    type=int,
+    default=24,
+    help="Optional neuron cap for the model.",
+)
+parser.add_argument(
+    "--output_path",
+    type=str,
+    default=None,
+    help="Optional path to save the collected data.",
+)
+
 
 
 class ImageClassificationBase(nn.Module):
@@ -289,15 +332,49 @@ def get_mnist():
 
 
 if __name__ == "__main__":
-    # Train the model and collect data
-    path = './data/collections/mnist_collection.json'
-    train_and_collect(path=path, model=CNN(), data_collection_interval=50)
-    visualize_collected_data(path)
+    args = parser.parse_args()
 
-    path = './data/collections/mnist_collection_largeCNN.json'
-    train_and_collect(path=path, model=CNN_large(), data_collection_interval=20, neuron_cap=24)
+    dataset = args.dataset
+    model_name = args.model
+    epochs = args.epochs
+    interval = args.interval
+    neuron_cap = args.neuron_cap
+    output_path = args.output_path
 
-    path = './data/collections/cifar10_collection.json'
-    train_dataset, test_dataset = get_cifar()
-    train(path, train_dataset, test_dataset, Cifar10CnnModel(), epochs=5)
-    visualize_collected_data(path)
+    print(f"Selected Dataset: {dataset}")
+    print(f"Selected Model: {model_name}")
+    print(f"Epochs: {epochs}")
+    print(f"Data Collection Interval: {interval}")
+    print(f"Neuron Cap: {neuron_cap}")
+
+    # Load dataset
+    if dataset == "mnist":
+        train_dataset, test_dataset = get_mnist()
+        default_output_path = './data/collections/mnist_collection.json'
+    elif dataset == "cifar10":
+        train_dataset, test_dataset = get_cifar()
+        default_output_path = './data/collections/cifar10_collection.json'
+    else:
+        print(f"Error: Unknown dataset '{dataset}'")
+        sys.exit(1)
+
+    # Instantiate model
+    if model_name == "cnn":
+        model = CNN()
+        current_output_path = output_path if output_path else default_output_path
+    elif model_name == "cnn_large":
+        model = CNN_large()
+        current_output_path = output_path if output_path else './data/collections/mnist_collection_largeCNN.json'
+    elif model_name == "cifar10_cnn":
+        model = Cifar10CnnModel()
+        current_output_path = output_path if output_path else default_output_path
+    else:
+        print(f"Error: Unknown model '{model_name}'")
+        sys.exit(1)
+
+    # Train and collect data
+    if not os.path.exists(current_output_path):
+        train_and_collect(current_output_path, train_dataset, test_dataset, model, epochs, interval, neuron_cap)
+
+    # Visualize collected data
+    visualize_collected_data(current_output_path)
