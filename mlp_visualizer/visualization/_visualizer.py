@@ -23,6 +23,27 @@ class ZoomableGraphicsView(QGraphicsView):
             self.scale(1.0 / zoom_factor, 1.0 / zoom_factor)
 
 
+def get_diverging_neuron_color(activation_value):
+    """Maps an activation value to a diverging color scheme (blue-white-red)."""
+    normalized_value = np.clip(activation_value, -1.0, 1.0)  # Clip to a reasonable range
+
+    if normalized_value >= 0:
+        # Map [0, 1] to [white, red]
+        intensity = int(normalized_value * 255)
+        red = 255
+        green = 255 - intensity
+        blue = 255 - intensity
+        alpha = 255
+    else:
+        # Map [-1, 0) to [blue, white)
+        intensity = int(abs(normalized_value) * 255)
+        red = 255 - intensity
+        green = 255 - intensity
+        blue = 255
+        alpha = 255
+
+    return QColor(red, green, blue, alpha)
+
 class MLPVisualizer(QMainWindow):
     def __init__(self, json_data_path=None):
         super().__init__()
@@ -375,13 +396,16 @@ class MLPVisualizer(QMainWindow):
         """Create and position neurons for each layer."""
         neurons = []
 
+        scene_rect = self.view.rect()
+        available_height = scene_rect.height()
+
         for layer_idx, layer_size in enumerate(layer_sizes):
             layer_neurons = []
             x = layer_idx * layer_spacing + 100
 
             # Center the layer vertically
             layer_height = (layer_size - 1) * neuron_spacing
-            y_offset = (600 - layer_height) / 2
+            y_offset = (available_height - layer_height) / 2
 
             for neuron_idx in range(layer_size):
                 y = y_offset + neuron_idx * neuron_spacing
@@ -395,9 +419,7 @@ class MLPVisualizer(QMainWindow):
 
                 # Set color based on activation
                 if activation_value is not None:
-                    intensity = min(255, int(abs(activation_value) * 200) + 50)
-                    color = QColor(100, 100, 255, intensity) if activation_value >= 0 else QColor(255, 100, 100,
-                                                                                                  intensity)
+                    color = get_diverging_neuron_color(activation_value)
                     neuron.setBrush(QBrush(color))
                 else:
                     neuron.setBrush(QBrush(QColor(200, 200, 200)))
@@ -407,7 +429,7 @@ class MLPVisualizer(QMainWindow):
                 self.scene.addItem(neuron)
 
                 # Add neuron label
-                label_text = f"x={layer_idx}.y={neuron_idx}"
+                label_text = f"L={layer_idx}.N={neuron_idx}"
                 if activation_value is not None:
                     label_text += f"\nact={activation_value:.3f}"
 
@@ -481,8 +503,9 @@ class MLPVisualizer(QMainWindow):
 
         for i, (layer_key, _) in enumerate(all_layers):
             if any(layer_type in layer_key for layer_type in ["ReLU", "tanh", "LeakyReLU", "sigmoid"]):
-                preceding_layer = all_layers[i-1]
-                if "Linear" not in preceding_layer:
+                preceding_layer = all_layers[i-1][0]
+                prepreciding_layer = all_layers[i-2][0] if i >= 2 else ""
+                if "Linear" not in preceding_layer and "Linear" not in prepreciding_layer:
                     continue
                 layer_key = layer_key.split("_")[1]
                 x = ind * layer_spacing + 125
