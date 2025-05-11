@@ -8,9 +8,9 @@ import torch.nn as nn
 
 
 def to_list(tensor: Any) -> list:
-    # if isinstance(tensor, torch.Tensor):
-    return tensor.detach().cpu().numpy().tolist()
-    # return tensor
+    if isinstance(tensor, torch.Tensor):
+        return tensor.detach().cpu().numpy().tolist()
+    return tensor
 
 
 def split_by_all(arr_of_strings: list[str], split_by: str, i: int = 0):
@@ -83,7 +83,7 @@ class ModelCollector(nn.Module):
         """
         self._pass_no += 1
         for k, v in kwargs.items():
-            self._state_dict[self._pass_no][k] = to_list(v) if isinstance(v, torch.Tensor) else v
+            self._state_dict[self._pass_no][k] = to_list(v)
         output = self._model(*args)
 
         return output
