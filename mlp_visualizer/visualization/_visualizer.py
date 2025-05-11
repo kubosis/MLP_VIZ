@@ -74,6 +74,26 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
             self.setPen(self.original_neuron_pen)
             self.setBrush(self.original_neuron_brush)
 
+def get_diverging_neuron_color(activation_value):
+    """Maps an activation value to a diverging color scheme (blue-white-red)."""
+    normalized_value = np.clip(activation_value, -1.0, 1.0)  # Clip to a reasonable range
+
+    if normalized_value >= 0:
+        # Map [0, 1] to [white, red]
+        intensity = int(normalized_value * 255)
+        red = 255
+        green = 255 - intensity
+        blue = 255 - intensity
+        alpha = 255
+    else:
+        # Map [-1, 0) to [blue, white)
+        intensity = int(abs(normalized_value) * 255)
+        red = 255 - intensity
+        green = 255 - intensity
+        blue = 255
+        alpha = 255
+
+    return QColor(red, green, blue, alpha)
 
 class MLPVisualizer(QMainWindow):
     def __init__(self, json_data_path=None):
@@ -335,21 +355,12 @@ class MLPVisualizer(QMainWindow):
             x_output_area_center = (len(all_layers) - 1) * layer_spacing * 0.5 + 200
 
         if all_layers and self.current_pass in self.data:
-            # The last layer in `all_layers` from architecture should be the final Identity wrapper
-            # Find the tag of the last Identity layer added by ModelCollector
-            final_identity_tag = None
-            for layer_tag, _ in reversed(all_layers):  # Search from the end
-                if "_Identity" in layer_tag:  # Or be more specific if needed
-                    final_identity_tag = layer_tag
-                    break
-
-            if final_identity_tag and final_identity_tag in self.data[self.current_pass]:
-                logits = self.data[self.current_pass][final_identity_tag].get('input')
-                if logits:  # Ensure logits list is not empty
-                    prediction = np.argmax(logits)
+            if 'prediction' in self.data[self.current_pass] and 'logits' in self.data[self.current_pass]:
+                    prediction = self.data[self.current_pass]['prediction']
 
                     # --- Histogram Drawing ---
                     # 1. Calculate Softmax probabilities
+                    logits = self.data[self.current_pass]['logits']
                     logits_array = np.array(logits, dtype=np.float32)
                     exp_logits = np.exp(logits_array - np.max(logits_array))  # Subtract max for numerical stability
                     probabilities = exp_logits / np.sum(exp_logits)
@@ -360,7 +371,7 @@ class MLPVisualizer(QMainWindow):
                     max_bar_pixel_height = 360  # Max height for a bar representing 1.0 probability
                     hist_total_width = num_classes * hist_bar_width + (num_classes - 1) * hist_bar_spacing
                     hist_start_x = x_output_area_center - (hist_total_width / 2)
-                    current_hist_x = hist_start_x  # Initialize for the loop
+                    current_hist_x = int(hist_start_x)  # Initialize for the loop
 
                     # Y position for the baseline of the histogram bars
                     y_hist_baseline = 250
@@ -432,8 +443,6 @@ class MLPVisualizer(QMainWindow):
 
                     prediction_text_item.setPos(pred_text_start_x, y_pred_text)
                     self.scene.addItem(prediction_text_item)
-                else:
-                    print(f"Logits (output) not found or empty for {final_identity_tag} in pass {self.current_pass}")
             else:
                 print(
                     f"Final Identity layer tag not found or no data for it in pass {self.current_pass}. Searched for tag like '{final_identity_tag}'.")
@@ -442,11 +451,14 @@ class MLPVisualizer(QMainWindow):
         """Create and position neurons for each layer."""
         neurons = []  # This will store tuples of (HoverableNeuronItem, QPointF)
 
+        scene_rect = self.view.rect()
+        available_height = scene_rect.height()
+
         for layer_idx, layer_size in enumerate(layer_sizes):
             layer_neurons_with_pos = []  # For the return structure
             x = layer_idx * layer_spacing + 100
             layer_height = (layer_size - 1) * neuron_spacing
-            y_offset = (600 - layer_height) / 2
+            y_offset = (available_height - layer_height) / 2
 
             for neuron_idx in range(layer_size):
                 y = y_offset + neuron_idx * neuron_spacing
@@ -455,9 +467,7 @@ class MLPVisualizer(QMainWindow):
 
                 activation_value = self.get_activation_value(layer_idx, neuron_idx, linear_layers)
                 if activation_value is not None:
-                    intensity = min(255, int(abs(activation_value) * 200) + 50)
-                    color = QColor(100, 100, 255, intensity) if activation_value >= 0 else QColor(
-                        255, 100, 100, intensity)
+                    color = get_diverging_neuron_color(activation_value)
                     neuron_item.setBrush(QBrush(color))
                 else:
                     neuron_item.setBrush(QBrush(QColor(200, 200, 200)))
@@ -532,7 +542,7 @@ class MLPVisualizer(QMainWindow):
                                                      end_point.x(), end_point.y())
                             original_pen = QPen(color, thickness)
                             line.setPen(original_pen)
-                            line.setZValue(-1)
+                            line.setZValue(-2)
                             self.scene.addItem(line)
 
                             self._all_connection_lines.append({
@@ -540,7 +550,7 @@ class MLPVisualizer(QMainWindow):
                                 'source_neuron': start_neuron_item,
                                 'target_neuron': end_neuron_item,
                                 'original_pen': QPen(original_pen),  # Store a copy
-                                'original_z': -1
+                                'original_z': -2
                             })
 
     def handle_neuron_hover_change(self, hovered_neuron_item, is_hover_enter):
@@ -607,7 +617,11 @@ class MLPVisualizer(QMainWindow):
         label_offset = 10
 
         for i, (layer_key, _) in enumerate(all_layers):
-            if any(layer_type in layer_key for layer_type in ["Linear", "ReLU", "tanh", "sigmoid"]):
+            if any(layer_type in layer_key for layer_type in ["ReLU", "tanh", "LeakyReLU", "sigmoid"]):
+                preceding_layer = all_layers[i-1][0]
+                prepreciding_layer = all_layers[i-2][0] if i >= 2 else ""
+                if "Linear" not in preceding_layer and "Linear" not in prepreciding_layer:
+                    continue
                 layer_key = layer_key.split("_")[1]
                 x = ind * layer_spacing + 125
                 y = layer_height + label_offset  # place below the layer
