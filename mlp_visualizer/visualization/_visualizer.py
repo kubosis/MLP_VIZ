@@ -279,21 +279,12 @@ class MLPVisualizer(QMainWindow):
             x_output_area_center = (len(all_layers) - 1) * layer_spacing * 0.5 + 200
 
         if all_layers and self.current_pass in self.data:
-            # The last layer in `all_layers` from architecture should be the final Identity wrapper
-            # Find the tag of the last Identity layer added by ModelCollector
-            final_identity_tag = None
-            for layer_tag, _ in reversed(all_layers):  # Search from the end
-                if "_Identity" in layer_tag:  # Or be more specific if needed
-                    final_identity_tag = layer_tag
-                    break
-
-            if final_identity_tag and final_identity_tag in self.data[self.current_pass]:
-                logits = self.data[self.current_pass][final_identity_tag].get('input')
-                if logits:  # Ensure logits list is not empty
-                    prediction = np.argmax(logits)
+            if 'prediction' in self.data[self.current_pass] and 'logits' in self.data[self.current_pass]:
+                    prediction = self.data[self.current_pass]['prediction']
 
                     # --- Histogram Drawing ---
                     # 1. Calculate Softmax probabilities
+                    logits = self.data[self.current_pass]['logits']
                     logits_array = np.array(logits, dtype=np.float32)
                     exp_logits = np.exp(logits_array - np.max(logits_array))  # Subtract max for numerical stability
                     probabilities = exp_logits / np.sum(exp_logits)
@@ -304,7 +295,7 @@ class MLPVisualizer(QMainWindow):
                     max_bar_pixel_height = 360  # Max height for a bar representing 1.0 probability
                     hist_total_width = num_classes * hist_bar_width + (num_classes - 1) * hist_bar_spacing
                     hist_start_x = x_output_area_center - (hist_total_width / 2)
-                    current_hist_x = hist_start_x  # Initialize for the loop
+                    current_hist_x = int(hist_start_x)  # Initialize for the loop
 
                     # Y position for the baseline of the histogram bars
                     y_hist_baseline = 250
@@ -376,8 +367,6 @@ class MLPVisualizer(QMainWindow):
 
                     prediction_text_item.setPos(pred_text_start_x, y_pred_text)
                     self.scene.addItem(prediction_text_item)
-                else:
-                    print(f"Logits (output) not found or empty for {final_identity_tag} in pass {self.current_pass}")
             else:
                 print(
                     f"Final Identity layer tag not found or no data for it in pass {self.current_pass}. Searched for tag like '{final_identity_tag}'.")
@@ -414,6 +403,7 @@ class MLPVisualizer(QMainWindow):
                     neuron.setBrush(QBrush(QColor(200, 200, 200)))
 
                 neuron.setPen(QPen(Qt.GlobalColor.black, 1))
+                neuron.setZValue(2)
                 self.scene.addItem(neuron)
 
                 # Add neuron label
@@ -476,7 +466,7 @@ class MLPVisualizer(QMainWindow):
                             line = QGraphicsLineItem(start_point.x(), start_point.y(),
                                                      end_point.x(), end_point.y())
                             line.setPen(QPen(color, thickness))
-                            line.setZValue(-1)  # Put connections behind neurons
+                            line.setZValue(-2)  # Put connections behind neurons
                             self.scene.addItem(line)
 
     def add_layer_labels(self, all_layers, layer_spacing):
@@ -490,7 +480,10 @@ class MLPVisualizer(QMainWindow):
         label_offset = 10
 
         for i, (layer_key, _) in enumerate(all_layers):
-            if any(layer_type in layer_key for layer_type in ["Linear", "ReLU", "tanh", "sigmoid"]):
+            if any(layer_type in layer_key for layer_type in ["ReLU", "tanh", "LeakyReLU", "sigmoid"]):
+                preceding_layer = all_layers[i-1]
+                if "Linear" not in preceding_layer:
+                    continue
                 layer_key = layer_key.split("_")[1]
                 x = ind * layer_spacing + 125
                 y = layer_height + label_offset  # place below the layer
