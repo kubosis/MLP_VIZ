@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
                              QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem,
                              QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel)
+from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtCore import Qt, QPointF, pyqtSignal
 from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap
 import sys
@@ -30,12 +31,13 @@ class MLPVisualizer(QMainWindow):
         self.data = None
         self.current_pass = "1"
         self.max_pass = 1
+        self._initial_fit_done = False
         self.setup_ui()
 
         # Load data if path is provided
         if json_data_path:
             self.load_data(json_data_path)
-            self.visualize_network()
+            self.visualize_network(preserve_current_view=False)
 
     def setup_ui(self):
         """Set up the UI components."""
@@ -74,10 +76,13 @@ class MLPVisualizer(QMainWindow):
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.content_layout.addWidget(self.image_label)
 
+        # Scene and view setup
         self.scene = QGraphicsScene()
+        self.scene.setBackgroundBrush(QBrush(Qt.GlobalColor.white))
         self.view = ZoomableGraphicsView(self.scene)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.view.setViewport(QOpenGLWidget())
         self.content_layout.addWidget(self.view)
 
     def load_data(self, json_path):
@@ -99,7 +104,7 @@ class MLPVisualizer(QMainWindow):
     def change_pass(self, pass_value):
         """Change the visualization to show a different pass."""
         self.current_pass = str(pass_value)
-        self.visualize_network()
+        self.visualize_network(preserve_current_view=self._initial_fit_done)
 
     def zoom_in(self):
         """Zoom in the view."""
@@ -109,7 +114,7 @@ class MLPVisualizer(QMainWindow):
         """Zoom out the view."""
         self.view.scale(0.8, 0.8)
 
-    def visualize_network(self):
+    def visualize_network(self, preserve_current_view=True):
         """Visualize the MLP architecture based on the loaded data."""
         if not self.data:
             print("No data loaded.")
@@ -155,12 +160,23 @@ class MLPVisualizer(QMainWindow):
         title_font.setBold(True)
         title_font.setPointSize(14)
         title.setFont(title_font)
-        title.setPos(50, 10)
+        title.setPos(10, 10)
+        # title.setPos(self.scene.sceneRect().left() + 10 if not self.scene.sceneRect().isEmpty() else 10,
+        #              self.scene.sceneRect().top() + 10 if not self.scene.sceneRect().isEmpty() else 10)
         self.scene.addItem(title)
 
         # Adjust view
-        self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-50, -50, 50, 50))
-        self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        current_items_rect = self.scene.itemsBoundingRect()
+        if not current_items_rect.isNull() and current_items_rect.isValid():
+            padded_rect = current_items_rect.adjusted(-50, -50, 50, 50)
+            self.scene.setSceneRect(padded_rect)
+        elif not self.scene.items():  # Scene is empty
+            self.scene.setSceneRect(0, 0, 1, 1)  # Minimal rect
+
+        if not preserve_current_view or not self._initial_fit_done:
+            if not self.scene.sceneRect().isEmpty() and self.scene.sceneRect().isValid():
+                self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self._initial_fit_done = True
 
         # Update image visualization
         self.visualize_input_image()
@@ -316,7 +332,7 @@ class MLPVisualizer(QMainWindow):
         """Handle window resize events."""
         super().resizeEvent(event)
         if self.data:
-            self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self.visualize_network(preserve_current_view=False)
 
 
 def visualize_mlp(json_path):
