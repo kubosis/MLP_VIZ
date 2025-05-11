@@ -17,7 +17,7 @@ import argparse
 parser = argparse.ArgumentParser(description="Train and visualize neural network data.")
 parser.add_argument(
     "--dataset",
-    choices=["mnist", "cifar10"],
+    choices=["mnist", "cifar10", "fashion_mnist"],
     default="mnist",
     help="Choose the dataset to use.",
 )
@@ -193,6 +193,24 @@ def get_mnist():
     test_dataset = datasets.MNIST('./data', train=False, transform=transform)
     return train_dataset, test_dataset
 
+def get_fashion_mnist():
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.2860,), (0.3530,))
+    ])
+    train_dataset = datasets.FashionMNIST('./data', train=True, download=True, transform=transform)
+    test_dataset = datasets.FashionMNIST('./data', train=False, download=True, transform=transform)
+    return train_dataset, test_dataset
+
+def get_stl10():
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4467, 0.4398, 0.4066), (0.2241, 0.2215, 0.2239))
+    ])
+    train_dataset = datasets.STL10('./data', split='train', download=True, transform=transform)
+    test_dataset = datasets.STL10('./data', split='test', download=True, transform=transform)
+    return train_dataset, test_dataset
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -213,7 +231,10 @@ if __name__ == "__main__":
     # Load dataset
     if dataset == "mnist":
         train_dataset, test_dataset = get_mnist()
-        default_output_path = './data/collections/mnist_collection.json'
+        default_output_path = f'./data/collections/mnist_collection{"_largeCNN" if model_name == "cnn_large" else ""}.json'
+    elif dataset == "fashion_mnist":
+        train_dataset, test_dataset = get_fashion_mnist()
+        default_output_path = f'./data/collections/mnist_fashion_collection{"_largeCNN" if model_name == "cnn_large" else ""}.json'
     elif dataset == "cifar10":
         train_dataset, test_dataset = get_cifar()
         default_output_path = './data/collections/cifar10_collection.json'
@@ -227,7 +248,7 @@ if __name__ == "__main__":
         current_output_path = output_path if output_path else default_output_path
     elif model_name == "cnn_large":
         model = CNN_large()
-        current_output_path = output_path if output_path else './data/collections/mnist_collection_largeCNN.json'
+        current_output_path = output_path if output_path else default_output_path
     elif model_name == "cifar10_cnn":
         model = Cifar10CnnModel()
         current_output_path = output_path if output_path else default_output_path
