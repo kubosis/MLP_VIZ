@@ -62,6 +62,7 @@ class MLPVisualizer(QMainWindow):
             self.load_data(json_data_path)
             self.visualize_network(preserve_current_view=False)
             self.update_plot()
+            self.update_architecture_label(self.data['architecture'])
 
     def setup_ui(self):
         """Set up the UI components."""
@@ -136,6 +137,13 @@ class MLPVisualizer(QMainWindow):
         plots_hbox_layout.addWidget(self.accuracy_plot_widget)
         plot_panel_container.setMaximumHeight(250)  # Set min height for the plot area
         self.main_layout.addWidget(plot_panel_container, stretch=1)
+
+        self.architecture_label = QLabel()
+        label_font = QFont()
+        label_font.setPointSize(12)
+        self.architecture_label.setFont(label_font)
+        self.controls_layout.addWidget(self.architecture_label)
+        self.controls_layout.addStretch(1)
 
     def load_data(self, json_path):
         """Load the collected MLP data from a JSON file."""
@@ -390,7 +398,29 @@ class MLPVisualizer(QMainWindow):
                     self.scene.addItem(prediction_text_item)
             else:
                 print(
-                    f"Final Identity layer tag not found or no data for it in pass {self.current_pass}. Searched for tag like '{final_identity_tag}'.")
+                    f"Final Identity layer tag not found or no data for it in pass {self.current_pass}.")
+
+    def update_architecture_label(self, architecture):
+        """Updates the label in the controls layout with architecture details, wrapping long text."""
+        architecture_info = []
+        for key, details in architecture.items():
+            if "Linear" in key and "in_features" in details and " out_features" in details:
+                architecture_info.append(
+                    f"{key.split('_')[1]}: {int(details['in_features'])} -> {int(details[' out_features'])}")
+            elif "CNN" in key and "in_features" in details and " out_features" in details:
+                architecture_info.append(
+                    f"{key.split('_')[1]}: {int(details['in_features'])} -> {int(details[' out_features'])}")
+            elif "Conv2d" in key:
+                architecture_info.append(key.split('_')[1])
+            elif "MaxPool2d" in key:
+                architecture_info.append(key.split('_')[1])
+            elif any(layer_type in key for layer_type in
+                     ["ReLU", "tanh", "LeakyReLU", "sigmoid", "BatchNorm", "Dropout"]):
+                architecture_info.append(key.split('_')[1])
+
+        architecture_text = " | ".join(architecture_info)
+        self.architecture_label.setText(architecture_text)
+        self.architecture_label.setWordWrap(True)
 
     def create_neurons(self, layer_sizes, layer_spacing, neuron_spacing, neuron_radius, linear_layers):
         """Create and position neurons for each layer."""
@@ -546,7 +576,6 @@ class MLPVisualizer(QMainWindow):
             200, 200, Qt.AspectRatioMode.KeepAspectRatio))
 
     def resizeEvent(self, event):
-        """Handle window resize events."""
         super().resizeEvent(event)
 
 

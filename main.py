@@ -206,5 +206,5 @@ def train(path, model=None):
 if __name__ == "__main__":
     # Train the model and collect data
     path = './data/collections/mnist_collection.json'
-    train(path, model=CNN_large())
+    #train(path, model=CNN_large())
     visualize_collected_data(path)
