@@ -47,7 +47,8 @@ class ModelCollector(nn.Module):
         nn.ReLU,
         nn.LeakyReLU,
         nn.Sigmoid,
-        nn.Tanh
+        nn.Tanh,
+        nn.Identity
     ]
 
     def __init__(self, model: nn.Module):

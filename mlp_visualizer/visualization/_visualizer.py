@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
                              QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem,
-                             QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel)
+                             QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel, QGraphicsRectItem)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap
@@ -172,6 +172,9 @@ class MLPVisualizer(QMainWindow):
         # Add layer labels
         self.add_layer_labels(all_layers, layer_spacing)
 
+        # Add prediction display
+        self.add_prediction_display(all_layers, linear_layers, layer_spacing, neurons)
+
         # Adjust view
         current_items_rect = self.scene.itemsBoundingRect()
         if not current_items_rect.isNull() and current_items_rect.isValid():
@@ -187,6 +190,122 @@ class MLPVisualizer(QMainWindow):
 
         # Update image visualization
         self.visualize_input_image()
+
+    def add_prediction_display(self, all_layers, linear_layers, layer_spacing, neurons):
+        x_output_area_center = 150  # Default if no neurons/layers
+        if neurons:
+            # X-coord of the center of a neuron in the last layer
+            x_last_neuron_layer_center_coord = neurons[-1][0][1].x()
+            x_output_area_center = x_last_neuron_layer_center_coord + layer_spacing  # Adjust this factor as needed
+        elif linear_layers:  # Fallback if no neurons drawn but linear layers exist
+            # Estimate based on number of linear layers
+            x_output_area_center = (len(linear_layers)) * layer_spacing + 200
+        elif all_layers:  # Fallback if only generic layers
+            x_output_area_center = (len(all_layers) - 1) * layer_spacing * 0.5 + 200
+
+        if all_layers and self.current_pass in self.data:
+            # The last layer in `all_layers` from architecture should be the final Identity wrapper
+            # Find the tag of the last Identity layer added by ModelCollector
+            final_identity_tag = None
+            for layer_tag, _ in reversed(all_layers):  # Search from the end
+                if "_Identity" in layer_tag:  # Or be more specific if needed
+                    final_identity_tag = layer_tag
+                    break
+
+            if final_identity_tag and final_identity_tag in self.data[self.current_pass]:
+                logits = self.data[self.current_pass][final_identity_tag].get('input')
+                if logits:  # Ensure logits list is not empty
+                    prediction = np.argmax(logits)
+
+                    # --- Histogram Drawing ---
+                    # 1. Calculate Softmax probabilities
+                    logits_array = np.array(logits, dtype=np.float32)
+                    exp_logits = np.exp(logits_array - np.max(logits_array))  # Subtract max for numerical stability
+                    probabilities = exp_logits / np.sum(exp_logits)
+
+                    num_classes = len(probabilities)
+                    hist_bar_width = 20
+                    hist_bar_spacing = 5
+                    max_bar_pixel_height = 360  # Max height for a bar representing 1.0 probability
+                    hist_total_width = num_classes * hist_bar_width + (num_classes - 1) * hist_bar_spacing
+                    hist_start_x = x_output_area_center - (hist_total_width / 2)
+                    current_hist_x = hist_start_x  # Initialize for the loop
+
+                    # Y position for the baseline of the histogram bars
+                    y_hist_baseline = 250
+
+                    hist_bar_font = QFont()
+                    hist_bar_font.setPointSize(8)
+
+                    for i in range(num_classes):
+                        bar_height = probabilities[i] * max_bar_pixel_height
+
+                        # Bar
+                        bar = QGraphicsRectItem(current_hist_x,
+                                                y_hist_baseline - bar_height,
+                                                hist_bar_width,
+                                                bar_height)
+                        bar_color = QColor(Qt.GlobalColor.blue)
+                        if i == prediction:
+                            bar_color = QColor(Qt.GlobalColor.green)  # Highlight predicted bar
+                        bar.setBrush(QBrush(bar_color))
+                        bar.setPen(QPen(Qt.GlobalColor.black, 0.5))  # Thin border
+                        self.scene.addItem(bar)
+
+                        # Label for the bar (class index)
+                        label = QGraphicsTextItem(str(i))
+                        label.setFont(hist_bar_font)
+                        label_x_pos = current_hist_x + hist_bar_width / 2 - label.boundingRect().width() / 2
+                        label_y_pos = y_hist_baseline + 2  # Just below the baseline
+                        label.setPos(label_x_pos, label_y_pos)
+                        self.scene.addItem(label)
+
+                        current_hist_x += hist_bar_width + hist_bar_spacing
+                        
+                    # --- Lines from last neurons to histogram bars ---
+                    if neurons and neurons[-1] and len(neurons[-1]) == num_classes:
+                        last_layer_neurons = neurons[-1]
+                        line_pen = QPen(QColor(Qt.GlobalColor.gray), 1, Qt.PenStyle.DashLine)  # Dashed gray line
+                        line_pen.setDashPattern([4, 2])  # Define dash pattern: 4px line, 2px gap
+
+                        for i in range(num_classes):
+                            if i < len(last_layer_neurons):  # Safety check
+                                neuron_item, neuron_center_pos = last_layer_neurons[i]
+
+                                # Target X for the line: center of the i-th histogram bar
+                                target_x = hist_start_x + \
+                                    (i * (hist_bar_width + hist_bar_spacing)) + (hist_bar_width / 2)
+                                # Target Y for the line: slightly above the histogram baseline
+                                target_y = y_hist_baseline - 5  # Adjust this offset as needed
+
+                                line = QGraphicsLineItem(neuron_center_pos.x(), neuron_center_pos.y(),
+                                                         target_x, target_y)
+                                line.setPen(line_pen)
+                                line.setZValue(-0.5)  # Behind histogram bars but above main connections
+                                self.scene.addItem(line)
+
+                    # --- Prediction Text (position below histogram) ---
+                    prediction_text_content = f"Prediction: {prediction}"
+                    prediction_text_item = QGraphicsTextItem(
+                        prediction_text_content)  # Create item to measure its width
+                    pred_font = QFont()
+                    pred_font.setBold(True)
+                    pred_font.setPointSize(12)
+                    prediction_text_item.setFont(pred_font)
+                    prediction_text_item.setDefaultTextColor(QColor(Qt.GlobalColor.black))
+
+                    y_pred_text = y_hist_baseline + 2 + QGraphicsTextItem(str(0)).boundingRect().height() + 10
+
+                    # Calculate starting X for prediction text so it's centered around x_output_area_center
+                    pred_text_start_x = x_output_area_center - (prediction_text_item.boundingRect().width() / 2)
+
+                    prediction_text_item.setPos(pred_text_start_x, y_pred_text)
+                    self.scene.addItem(prediction_text_item)
+                else:
+                    print(f"Logits (output) not found or empty for {final_identity_tag} in pass {self.current_pass}")
+            else:
+                print(
+                    f"Final Identity layer tag not found or no data for it in pass {self.current_pass}. Searched for tag like '{final_identity_tag}'.")
 
     def create_neurons(self, layer_sizes, layer_spacing, neuron_spacing, neuron_radius, linear_layers):
         """Create and position neurons for each layer."""
@@ -223,9 +342,9 @@ class MLPVisualizer(QMainWindow):
                 self.scene.addItem(neuron)
 
                 # Add neuron label
-                label_text = f"{layer_idx}.{neuron_idx}"
+                label_text = f"x={layer_idx}.y={neuron_idx}"
                 if activation_value is not None:
-                    label_text += f"\n{activation_value:.3f}"
+                    label_text += f"\nact={activation_value:.3f}"
 
                 label = QGraphicsTextItem(label_text)
                 label.setPos(x - neuron_radius - 10, y - neuron_radius - 35)
