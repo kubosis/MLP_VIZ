@@ -34,8 +34,6 @@ class MLPVisualizer(QMainWindow):
         self.max_pass = 1
         self._initial_fit_done = False
         self.all_metrics_data = []  # Stores tuples: (pass_num, loss, accuracy)
-        self.loss_plot_item = None
-        self.accuracy_plot_item = None
         self.setup_ui()
 
         # Load data if path is provided
@@ -96,17 +94,25 @@ class MLPVisualizer(QMainWindow):
 
         # Plot Panel (bottom)
         plot_panel_container = QWidget()  # Use a container for better sizing control if needed
-        self.plot_panel_layout = QVBoxLayout(plot_panel_container)
-        plot_widget = pg.PlotWidget()
-        plot_widget.setTitle("Training Metrics", color="k", size="12pt")
-        plot_widget.setLabel('left', 'Value', color='k')
-        plot_widget.setLabel('bottom', 'Pass Number', color='k')
-        plot_widget.addLegend(offset=(-10, 10))  # Adjust legend position
-        plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        plots_hbox_layout = QHBoxLayout(plot_panel_container)  # Horizontal layout for two plots
 
-        self.loss_plot_item = plot_widget.plot(pen=pg.mkPen(color=(255, 0, 0), width=2), name="Loss")
-        self.accuracy_plot_item = plot_widget.plot(pen=pg.mkPen(color=(0, 0, 255), width=2), name="Accuracy")
-        self.plot_panel_layout.addWidget(plot_widget)
+        # Loss Plot Widget
+        self.loss_plot_widget = pg.PlotWidget(name="LossPlot")
+        self.loss_plot_widget.setTitle("Loss over Passes", color=pg.getConfigOption('foreground'), size="10pt")
+        self.loss_plot_widget.setLabel('left', 'Loss Value', color=pg.getConfigOption('foreground'))
+        self.loss_plot_widget.setLabel('bottom', 'Pass Number', color=pg.getConfigOption('foreground'))
+        self.loss_plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        self.loss_plot_item = self.loss_plot_widget.plot(pen=pg.mkPen(color='r', width=2), name="Loss")
+        plots_hbox_layout.addWidget(self.loss_plot_widget)
+
+        # Accuracy Plot Widget
+        self.accuracy_plot_widget = pg.PlotWidget(name="AccuracyPlot")
+        self.accuracy_plot_widget.setTitle("Accuracy over Passes", color=pg.getConfigOption('foreground'), size="10pt")
+        self.accuracy_plot_widget.setLabel('left', 'Accuracy Value', color=pg.getConfigOption('foreground'))
+        self.accuracy_plot_widget.setLabel('bottom', 'Pass Number', color=pg.getConfigOption('foreground'))
+        self.accuracy_plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        self.accuracy_plot_item = self.accuracy_plot_widget.plot(pen=pg.mkPen(color='b', width=2), name="Accuracy")
+        plots_hbox_layout.addWidget(self.accuracy_plot_widget)
         plot_panel_container.setMaximumHeight(250)  # Set min height for the plot area
         self.main_layout.addWidget(plot_panel_container, stretch=1)
 
@@ -136,6 +142,16 @@ class MLPVisualizer(QMainWindow):
                         self.all_metrics_data.append((pass_num_int, float(loss), float(accuracy)))
 
                 self.all_metrics_data.sort(key=lambda x: x[0])
+                # Calculate min/max loss and accuracy
+                min_loss = min(self.all_metrics_data, key=lambda x: x[1])[1] if self.all_metrics_data else None
+                max_loss = max(self.all_metrics_data, key=lambda x: x[1])[1] if self.all_metrics_data else None
+                min_acc = min(self.all_metrics_data, key=lambda x: x[2])[2] if self.all_metrics_data else None
+                max_acc = max(self.all_metrics_data, key=lambda x: x[2])[2] if self.all_metrics_data else None
+                # Set plot limits
+                self.loss_plot_widget.setXRange(1, self.max_pass)
+                self.accuracy_plot_widget.setXRange(1, self.max_pass)
+                self.loss_plot_widget.setYRange(min_loss, max_loss)
+                self.accuracy_plot_widget.setYRange(min_acc, max_acc)
             else:  # No numeric passes found
                 self.max_pass = 1
                 self.current_pass = "1"
