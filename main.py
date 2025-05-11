@@ -132,7 +132,7 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
                 collector.register_value("label", prediction_label)
                 collector.register_value("logits", output[0])
                 accuracy = acc.compute()
-                collector.register_value("loss", avg_loss / batch_idx + 1 + epoch * len(train_loader))
+                collector.register_value("loss", avg_loss / (batch_idx + 1 + epoch * len(train_loader)))
                 collector.register_value("accuracy", accuracy)
                 print(f"Loss: {loss.item():.6f}, Accuracy: {accuracy:.2f}")
 
