@@ -183,7 +183,7 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
     collector = ModelCollector(model, cap)
 
     acc= torchmetrics.Accuracy("multiclass", num_classes=10).to(device)
-
+    avg_loss = 0
     for epoch in range(epochs):
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -199,6 +199,8 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
             loss.backward()
             optimizer.step()
             acc(output, target)
+
+            avg_loss += loss.item()
 
             # Print progress
             if batch_idx % 10 == 0:
@@ -221,15 +223,9 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
                 collector.register_value("label", prediction_label)
                 collector.register_value("logits", output[0])
                 loss = F.cross_entropy(output, target)
-                prediction = output.argmax(dim=1, keepdim=False)
-                corr_pred = (prediction == target).sum().item()
-                total_pred = target.size(0)
-                print(f"correct predictions: {corr_pred}, total predictions: {total_pred}")
-                accuracy = corr_pred / total_pred if total_pred > 0 else 0.0
-                collector.register_value("loss", loss.item())
-                collector.register_value("accuracy", accuracy)
-                print(f"Loss: {loss.item():.6f}, Accuracy: {accuracy:.2f}")
 
+                collector.register_value("loss", avg_loss / (batch_idx + 1 + epoch * len(train_loader)))
+                collector.register_value("accuracy", acc.compute())
                 loss.backward()
                 model.train()
                 collections_made += 1
