@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphic
                              QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel, QGraphicsRectItem)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtCore import Qt, QPointF
-from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap
+from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap, QIcon
 import pyqtgraph as pg
 import sys
 import json
@@ -27,8 +27,8 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
     STATE_DEFAULT = 0
     STATE_HIGHLIGHTED = 1
     STATE_SIBLING_OF_HOVERED = 2  # Neuron is in same layer as a hovered one, but not hovered itself
-    highlighted_connection_z_value = 2  # Z-value for connections of the HOVERED neuron
-    dimmed_connection_alpha = 15  # Alpha for connections of OTHER neurons in the SAME layer
+    highlighted_connection_z_value = 1  # Z-value for connections of the HOVERED neuron
+    dimmed_connection_alpha = 5  # Alpha for connections of OTHER neurons in the SAME layer
 
     def __init__(self, layer_idx, neuron_idx_in_layer, visualizer_ref, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -43,7 +43,7 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
         self.state = HoverableNeuronItem.STATE_DEFAULT
 
         # --- Appearance Config ---
-        self.highlight_neuron_pen = QPen(QColor("black"), 2, Qt.PenStyle.SolidLine)
+        self.highlight_neuron_pen = QPen(QColor("black"), 3, Qt.PenStyle.SolidLine)
 
     def store_initial_appearance(self):
         self.original_neuron_pen = self.pen()
@@ -727,11 +727,18 @@ class MLPVisualizer(QMainWindow):
 
 
 def visualize_mlp(json_path):
-    """Create and show the MLP visualizer with the given data."""
     app = QApplication(sys.argv)
+
+    icon_path = "resources/favicon.ico"
+    icon = QIcon(icon_path)
+
+    app.setWindowIcon(icon)
     visualizer = MLPVisualizer(json_path)
+    visualizer.setWindowIcon(icon)
     visualizer.show()
+
     sys.exit(app.exec())
+
 
 
 if __name__ == "__main__":
