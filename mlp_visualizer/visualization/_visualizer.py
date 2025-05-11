@@ -117,6 +117,7 @@ class MLPVisualizer(QMainWindow):
             self.load_data(json_data_path)
             self.visualize_network(preserve_current_view=False)
             self.update_plot()
+            self.update_architecture_label(self.data['architecture'])
 
     def setup_ui(self):
         """Set up the UI components."""
@@ -191,6 +192,13 @@ class MLPVisualizer(QMainWindow):
         plots_hbox_layout.addWidget(self.accuracy_plot_widget)
         plot_panel_container.setMaximumHeight(250)  # Set min height for the plot area
         self.main_layout.addWidget(plot_panel_container, stretch=1)
+
+        self.architecture_label = QLabel()
+        label_font = QFont()
+        label_font.setPointSize(12)
+        self.architecture_label.setFont(label_font)
+        self.controls_layout.addWidget(self.architecture_label)
+        self.controls_layout.addStretch(1)
 
     def load_data(self, json_path):
         """Load the collected MLP data from a JSON file."""
@@ -447,7 +455,29 @@ class MLPVisualizer(QMainWindow):
                 self.scene.addItem(prediction_text_item)
             else:
                 print(
-                    f"Final Identity layer tag not found or no data for it in pass {self.current_pass}. Searched for tag like '{final_identity_tag}'.")
+                    f"Final Identity layer tag not found or no data for it in pass {self.current_pass}.")
+
+    def update_architecture_label(self, architecture):
+        """Updates the label in the controls layout with architecture details, wrapping long text."""
+        architecture_info = []
+        for key, details in architecture.items():
+            if "Linear" in key and "in_features" in details and " out_features" in details:
+                architecture_info.append(
+                    f"{key.split('_')[1]}: {int(details['in_features'])} -> {int(details[' out_features'])}")
+            elif "CNN" in key and "in_features" in details and " out_features" in details:
+                architecture_info.append(
+                    f"{key.split('_')[1]}: {int(details['in_features'])} -> {int(details[' out_features'])}")
+            elif "Conv2d" in key:
+                architecture_info.append(key.split('_')[1])
+            elif "MaxPool2d" in key:
+                architecture_info.append(key.split('_')[1])
+            elif any(layer_type in key for layer_type in
+                     ["ReLU", "tanh", "LeakyReLU", "sigmoid", "BatchNorm", "Dropout"]):
+                architecture_info.append(key.split('_')[1])
+
+        architecture_text = " | ".join(architecture_info)
+        self.architecture_label.setText(architecture_text)
+        self.architecture_label.setWordWrap(True)
 
     def create_neurons(self, layer_sizes, layer_spacing, neuron_spacing, neuron_radius, linear_layers):
         """Create and position neurons for each layer."""
@@ -635,35 +665,64 @@ class MLPVisualizer(QMainWindow):
                 self.scene.addItem(label)
 
     def visualize_input_image(self):
-        """Visualize the input image as grayscale."""
+        """Visualize the input image, supporting both grayscale and RGB."""
         if not self.data or self.current_pass not in self.data:
             return
 
         image_data = self.data[self.current_pass].get("input")
-        if not image_data:
+        if image_data is None:
             return
 
-        # Convert to normalized grayscale image
-        image_array = np.array(image_data, dtype=np.float32)
-        min_val = image_array.min()
-        max_val = image_array.max()
-        range_val = max_val - min_val
+        image_array_float = np.array(image_data, dtype=np.float32)
 
-        if range_val != 0:
-            image_array = (image_array - min_val) / range_val
+        min_val = image_array_float.min()
+        max_val = image_array_float.max()
+
+        # Shift and scale to [0, 255]
+        if min_val < 0:
+            # Example: If data is in [-1, 1], shift to [0, 2] then scale to [0, 255]
+            image_array_shifted = (image_array_float + abs(min_val))
+            max_val_shifted = max_val + abs(min_val)
+            if max_val_shifted != 0:
+                image_array_normalized = (image_array_shifted / max_val_shifted) * 255
+            else:
+                image_array_normalized = np.zeros_like(image_array_float)
+            image_array = image_array_normalized.astype(np.uint8)
         else:
-            image_array = np.zeros_like(image_array)
+            # If no negative values, proceed with the original normalization
+            range_val = max_val - min_val
+            if range_val != 0:
+                image_array = ((image_array_float - min_val) / range_val) * 255
+            else:
+                image_array = np.zeros_like(image_array_float)
+            image_array = image_array.astype(np.uint8)
 
-        image_array = (image_array * 255).astype(np.uint8)
+        # Handle grayscale or RGB based on the first dimension (channels)
+        if image_array.ndim == 2:
+            h, w = image_array.shape
+            qimage = QImage(image_array.data.tobytes(), w, h, w, QImage.Format.Format_Grayscale8)
+        elif image_array.ndim == 3:
+            channels = image_array.shape[0]
+            if channels == 1:
+                image_array = image_array[0]
+                h, w = image_array.shape
+                qimage = QImage(image_array.data.tobytes(), w, h, w, QImage.Format.Format_Grayscale8)
+            elif channels == 3:
+                image_array = np.transpose(image_array, (1, 2, 0))
+                h, w, _ = image_array.shape
+                qimage = QImage(image_array.data.tobytes(), w, h, 3 * w, QImage.Format.Format_RGB888)
+            else:
+                print(f"Unsupported number of channels: {channels}")
+                return
+        else:
+            print(f"Unsupported image shape: {image_array.shape}")
+            return
 
-        # Create and display image
-        h, w = image_array.shape[1:]
-        qimage = QImage(image_array.data, w, h, w, QImage.Format.Format_Grayscale8)
+        # Show image
         self.image_label.setPixmap(QPixmap.fromImage(qimage).scaled(
             200, 200, Qt.AspectRatioMode.KeepAspectRatio))
 
     def resizeEvent(self, event):
-        """Handle window resize events."""
         super().resizeEvent(event)
 
 
