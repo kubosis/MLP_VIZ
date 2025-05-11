@@ -23,6 +23,57 @@ class ZoomableGraphicsView(QGraphicsView):
             self.scale(1.0 / zoom_factor, 1.0 / zoom_factor)
 
 
+class HoverableNeuronItem(QGraphicsEllipseItem):
+    STATE_DEFAULT = 0
+    STATE_HIGHLIGHTED = 1
+    STATE_SIBLING_OF_HOVERED = 2  # Neuron is in same layer as a hovered one, but not hovered itself
+    highlighted_connection_z_value = 2  # Z-value for connections of the HOVERED neuron
+    dimmed_connection_alpha = 15  # Alpha for connections of OTHER neurons in the SAME layer
+
+    def __init__(self, layer_idx, neuron_idx_in_layer, visualizer_ref, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptHoverEvents(True)
+
+        self.layer_idx = layer_idx
+        self.neuron_idx_in_layer = neuron_idx_in_layer  # For easier identification
+        self.visualizer_ref = visualizer_ref
+
+        self.original_neuron_pen = QPen()
+        self.original_neuron_brush = QBrush()
+        self.state = HoverableNeuronItem.STATE_DEFAULT
+
+        # --- Appearance Config ---
+        self.highlight_neuron_pen = QPen(QColor("black"), 2, Qt.PenStyle.SolidLine)
+
+    def store_initial_appearance(self):
+        self.original_neuron_pen = self.pen()
+        self.original_neuron_brush = self.brush()
+
+    def hoverEnterEvent(self, event):
+        self.visualizer_ref.handle_neuron_hover_change(self, True)
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self.visualizer_ref.handle_neuron_hover_change(self, False)
+        super().hoverLeaveEvent(event)
+
+    def set_state(self, new_state):
+        if self.state == new_state:
+            return
+        self.state = new_state
+        self.update_neuron_appearance()
+
+    def update_neuron_appearance(self):
+        if self.state == HoverableNeuronItem.STATE_HIGHLIGHTED:
+            self.setPen(self.highlight_neuron_pen)
+            self.setBrush(self.original_neuron_brush)
+        elif self.state == HoverableNeuronItem.STATE_SIBLING_OF_HOVERED:
+            self.setPen(self.original_neuron_pen)
+            self.setBrush(self.original_neuron_brush)
+        else:  # STATE_DEFAULT
+            self.setPen(self.original_neuron_pen)
+            self.setBrush(self.original_neuron_brush)
+
 def get_diverging_neuron_color(activation_value):
     """Maps an activation value to a diverging color scheme (blue-white-red)."""
     normalized_value = np.clip(activation_value, -1.0, 1.0)  # Clip to a reasonable range
@@ -55,6 +106,8 @@ class MLPVisualizer(QMainWindow):
         self.max_pass = 1
         self._initial_fit_done = False
         self.all_metrics_data = []  # Stores tuples: (pass_num, loss, accuracy)
+        self._all_neuron_items = []  # Flat list of all HoverableNeuronItem instances
+        self._all_connection_lines = []
         self.setup_ui()
 
         # Load data if path is provided
@@ -244,6 +297,8 @@ class MLPVisualizer(QMainWindow):
 
         # Clear the scene
         self.scene.clear()
+        self._all_neuron_items.clear()
+        self._all_connection_lines.clear()
         architecture = self.data.get("architecture", {})
 
         # Identify and sort layers by their index
@@ -424,53 +479,44 @@ class MLPVisualizer(QMainWindow):
 
     def create_neurons(self, layer_sizes, layer_spacing, neuron_spacing, neuron_radius, linear_layers):
         """Create and position neurons for each layer."""
-        neurons = []
+        neurons = []  # This will store tuples of (HoverableNeuronItem, QPointF)
 
         scene_rect = self.view.rect()
         available_height = scene_rect.height()
 
         for layer_idx, layer_size in enumerate(layer_sizes):
-            layer_neurons = []
+            layer_neurons_with_pos = []  # For the return structure
             x = layer_idx * layer_spacing + 100
-
-            # Center the layer vertically
             layer_height = (layer_size - 1) * neuron_spacing
             y_offset = (available_height - layer_height) / 2
 
             for neuron_idx in range(layer_size):
                 y = y_offset + neuron_idx * neuron_spacing
+                neuron_item = HoverableNeuronItem(layer_idx, neuron_idx, self, x - neuron_radius, y - neuron_radius,
+                                                  2 * neuron_radius, 2 * neuron_radius)
 
-                # Create neuron (circle)
-                neuron = QGraphicsEllipseItem(x - neuron_radius, y - neuron_radius,
-                                              2 * neuron_radius, 2 * neuron_radius)
-
-                # Get activation value
                 activation_value = self.get_activation_value(layer_idx, neuron_idx, linear_layers)
-
-                # Set color based on activation
                 if activation_value is not None:
                     color = get_diverging_neuron_color(activation_value)
-                    neuron.setBrush(QBrush(color))
+                    neuron_item.setBrush(QBrush(color))
                 else:
-                    neuron.setBrush(QBrush(QColor(200, 200, 200)))
+                    neuron_item.setBrush(QBrush(QColor(200, 200, 200)))
+                neuron_item.setPen(QPen(Qt.GlobalColor.black, 1))
+                neuron_item.store_initial_appearance()
 
-                neuron.setPen(QPen(Qt.GlobalColor.black, 1))
-                neuron.setZValue(2)
-                self.scene.addItem(neuron)
+                self.scene.addItem(neuron_item)
+                self._all_neuron_items.append(neuron_item)
 
-                # Add neuron label
-                label_text = f"L={layer_idx}.N={neuron_idx}"
+                label_text = f"L={layer_idx}, N={neuron_idx}"
                 if activation_value is not None:
                     label_text += f"\nact={activation_value:.3f}"
-
                 label = QGraphicsTextItem(label_text)
+                label.setDefaultTextColor(QColor(Qt.GlobalColor.white))
                 label.setPos(x - neuron_radius - 10, y - neuron_radius - 35)
                 self.scene.addItem(label)
 
-                layer_neurons.append((neuron, QPointF(x, y)))
-
-            neurons.append(layer_neurons)
-
+                layer_neurons_with_pos.append((neuron_item, QPointF(x, y)))
+            neurons.append(layer_neurons_with_pos)
         return neurons
 
     def get_activation_value(self, layer_idx, neuron_idx, linear_layers):
@@ -488,38 +534,107 @@ class MLPVisualizer(QMainWindow):
 
         return None
 
-    def draw_connections(self, neurons, linear_layers):
+    def draw_connections(self, structured_neurons, linear_layers):  # Takes the output of create_neurons
         """Draw connections (weights) between neurons."""
-        for i in range(len(linear_layers)):
-            layer_key, _ = linear_layers[i]
+        if not structured_neurons or len(structured_neurons) < 1:  # Check if there's at least one layer of neurons
+            return
 
-            # Get weight matrix for current pass
+        for i in range(len(linear_layers)):
+            if i + 1 >= len(structured_neurons):  # Ensure there is a next layer in structured_neurons
+                break
+
+            layer_key, _ = linear_layers[i]
             current_pass_data = self.data.get(self.current_pass, {})
             layer_data = current_pass_data.get(layer_key, {})
             weight_matrix = layer_data.get("weight", [])
 
             if weight_matrix:
-                for from_idx in range(len(neurons[i])):
-                    for to_idx in range(len(neurons[i + 1])):
-                        # Get weight if available
+                # Ensure neuron lists for current and next layer are not empty
+                if not structured_neurons[i] or not structured_neurons[i+1]:
+                    continue
+
+                for from_idx in range(len(structured_neurons[i])):
+                    for to_idx in range(len(structured_neurons[i + 1])):
                         if to_idx < len(weight_matrix) and from_idx < len(weight_matrix[to_idx]):
                             weight = weight_matrix[to_idx][from_idx]
-
-                            # Determine line thickness and color based on weight
                             weight_abs = abs(weight)
-                            thickness = max(1, min(5, weight_abs * 5))
-                            color = QColor(255, 0, 0, min(255, int(weight_abs * 200) + 50)) if weight >= 0 else QColor(
-                                0, 0, 255, min(255, int(weight_abs * 200) + 50))
+                            thickness = max(0.5, min(3.5, weight_abs * 3.5))
+                            # Line colors: Red for positive, Blue for negative
+                            line_color_tuple = (255, 0, 0, min(255, int(weight_abs * 180) + 70)) if weight >= 0 \
+                                else (0, 0, 255, min(255, int(weight_abs * 180) + 70))
+                            color = QColor(*line_color_tuple)
 
-                            # Draw connection line
-                            start_point = neurons[i][from_idx][1]
-                            end_point = neurons[i + 1][to_idx][1]
+                            # Get HoverableNeuronItem instances
+                            start_neuron_item, start_point = structured_neurons[i][from_idx]
+                            end_neuron_item, end_point = structured_neurons[i + 1][to_idx]
 
                             line = QGraphicsLineItem(start_point.x(), start_point.y(),
                                                      end_point.x(), end_point.y())
-                            line.setPen(QPen(color, thickness))
-                            line.setZValue(-2)  # Put connections behind neurons
+                            original_pen = QPen(color, thickness)
+                            line.setPen(original_pen)
+                            line.setZValue(-2)
                             self.scene.addItem(line)
+
+                            self._all_connection_lines.append({
+                                'line': line,
+                                'source_neuron': start_neuron_item,
+                                'target_neuron': end_neuron_item,
+                                'original_pen': QPen(original_pen),  # Store a copy
+                                'original_z': -2
+                            })
+
+    def handle_neuron_hover_change(self, hovered_neuron_item, is_hover_enter):
+        if is_hover_enter:
+            self.active_hovered_neuron_item = hovered_neuron_item
+            for neuron_item in self._all_neuron_items:
+                if neuron_item == hovered_neuron_item:
+                    neuron_item.set_state(HoverableNeuronItem.STATE_HIGHLIGHTED)
+                elif neuron_item.layer_idx == hovered_neuron_item.layer_idx:
+                    neuron_item.set_state(HoverableNeuronItem.STATE_SIBLING_OF_HOVERED)
+                else:
+                    neuron_item.set_state(HoverableNeuronItem.STATE_DEFAULT)
+        else:
+            self.active_hovered_neuron_item = None
+            for neuron_item in self._all_neuron_items:
+                neuron_item.set_state(HoverableNeuronItem.STATE_DEFAULT)
+
+        self.update_all_connections_appearance()  # Update lines based on new neuron states
+        self.scene.update()
+
+    def update_all_connections_appearance(self):
+        for conn_data in self._all_connection_lines:
+            line = conn_data['line']
+            source_neuron = conn_data['source_neuron']
+            target_neuron = conn_data['target_neuron']
+            original_pen = conn_data['original_pen']
+            original_z = conn_data['original_z']
+
+            # Determine line appearance based on states of connected neurons
+            is_part_of_highlighted_path = (source_neuron.state == HoverableNeuronItem.STATE_HIGHLIGHTED or
+                                           target_neuron.state == HoverableNeuronItem.STATE_HIGHLIGHTED)
+
+            # If either connected neuron is part of the main highlighted path
+            if is_part_of_highlighted_path:
+                line.setPen(original_pen)
+                line.setZValue(HoverableNeuronItem.highlighted_connection_z_value)
+            # If source is a sibling (and target is not highlighted, implies connection to next layer)
+            # OR if target is a sibling (and source is not highlighted, implies connection from prev layer)
+            elif (source_neuron.state == HoverableNeuronItem.STATE_SIBLING_OF_HOVERED or
+                  target_neuron.state == HoverableNeuronItem.STATE_SIBLING_OF_HOVERED):
+                dim_color = QColor(original_pen.color())
+                dim_color.setAlpha(HoverableNeuronItem.dimmed_connection_alpha)
+                dimmed_pen = QPen(dim_color, original_pen.widthF())
+                # Copy other pen properties
+                dimmed_pen.setStyle(original_pen.style())
+                dimmed_pen.setCapStyle(original_pen.capStyle())
+                dimmed_pen.setJoinStyle(original_pen.joinStyle())
+                line.setPen(dimmed_pen)
+                # Keep original Z, or maybe -0.5 to be above other default lines but below main highlight
+                line.setZValue(original_z)
+            # Default state for all other lines
+            else:
+                line.setPen(original_pen)
+                line.setZValue(original_z)
 
     def add_layer_labels(self, all_layers, layer_spacing):
         """Add labels for each layer."""
