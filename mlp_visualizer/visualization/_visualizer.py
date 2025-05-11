@@ -36,7 +36,6 @@ class MLPVisualizer(QMainWindow):
         self.all_metrics_data = []  # Stores tuples: (pass_num, loss, accuracy)
         self.loss_plot_item = None
         self.accuracy_plot_item = None
-        self.plot_widget = None
         self.setup_ui()
 
         # Load data if path is provided
@@ -98,16 +97,16 @@ class MLPVisualizer(QMainWindow):
         # Plot Panel (bottom)
         plot_panel_container = QWidget()  # Use a container for better sizing control if needed
         self.plot_panel_layout = QVBoxLayout(plot_panel_container)
-        self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setTitle("Training Metrics", color="k", size="12pt")
-        self.plot_widget.setLabel('left', 'Value', color='k')
-        self.plot_widget.setLabel('bottom', 'Pass Number', color='k')
-        self.plot_widget.addLegend(offset=(-10, 10))  # Adjust legend position
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        plot_widget = pg.PlotWidget()
+        plot_widget.setTitle("Training Metrics", color="k", size="12pt")
+        plot_widget.setLabel('left', 'Value', color='k')
+        plot_widget.setLabel('bottom', 'Pass Number', color='k')
+        plot_widget.addLegend(offset=(-10, 10))  # Adjust legend position
+        plot_widget.showGrid(x=True, y=True, alpha=0.3)
 
-        self.loss_plot_item = self.plot_widget.plot(pen=pg.mkPen(color=(255, 0, 0), width=2), name="Loss")
-        self.accuracy_plot_item = self.plot_widget.plot(pen=pg.mkPen(color=(0, 0, 255), width=2), name="Accuracy")
-        self.plot_panel_layout.addWidget(self.plot_widget)
+        self.loss_plot_item = plot_widget.plot(pen=pg.mkPen(color=(255, 0, 0), width=2), name="Loss")
+        self.accuracy_plot_item = plot_widget.plot(pen=pg.mkPen(color=(0, 0, 255), width=2), name="Accuracy")
+        self.plot_panel_layout.addWidget(plot_widget)
         plot_panel_container.setMaximumHeight(250)  # Set min height for the plot area
         self.main_layout.addWidget(plot_panel_container, stretch=1)
 
@@ -153,8 +152,6 @@ class MLPVisualizer(QMainWindow):
             self.pass_display_label.setText("Pass: N/A")
 
     def update_plot(self):
-        if not hasattr(self, 'plot_widget') or self.plot_widget is None:  # Check if UI setup
-            return
         if not self.all_metrics_data:
             if self.loss_plot_item:
                 self.loss_plot_item.setData([], [])
@@ -178,7 +175,6 @@ class MLPVisualizer(QMainWindow):
 
         self.loss_plot_item.setData(passes, losses)
         self.accuracy_plot_item.setData(passes, accuracies)
-        # self.plot_widget.autoRange() # pyqtgraph usually autoranges by default
 
     def change_pass(self, pass_value):
         """Change the visualization to show a different pass."""
