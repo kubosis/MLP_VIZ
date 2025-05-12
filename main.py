@@ -68,7 +68,7 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
         num_collections: Number of data collections to make, -1 to collect until the end
     """
     if os.path.exists(path):
-        print(f"File {path} already exists. Please remove it before running the script.")
+        print(f"File {path} already exists. Skipping training...")
         return
     torch.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
@@ -257,9 +257,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Train and collect data
-    if not os.path.exists(current_output_path):
-        train_and_collect(path=current_output_path, train_dataset=train_dataset,test_dataset=test_dataset,model=model,
-                          epochs=epochs, data_collection_interval=interval, neuron_cap=neuron_cap)
+    train_and_collect(path=current_output_path, train_dataset=train_dataset,test_dataset=test_dataset,model=model,
+                        epochs=epochs, data_collection_interval=interval, neuron_cap=neuron_cap)
 
     # Visualize collected data
     visualize_collected_data(current_output_path)
