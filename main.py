@@ -254,6 +254,8 @@ if __name__ == "__main__":
     elif dataset == "cifar10":
         train_dataset, test_dataset = get_cifar()
         default_output_path = './data/collections/cifar10_collection.json'
+        model_name = "cifar10_cnn"  # Force to use Cifar10CnnModel for CIFAR-10
+        print("Forcing model to cifar10_cnn for CIFAR-10 dataset.")
     else:
         print(f"Error: Unknown dataset '{dataset}'")
         sys.exit(1)
