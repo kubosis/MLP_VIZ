@@ -108,3 +108,4 @@ ENV/
 mlp_visualizer/torch_collector/example.json
 /data/MNIST
 /data/cifar-10-batches-py
+/data/FashionMNIST
