@@ -52,10 +52,24 @@ parser.add_argument(
     help="Optional path to save the collected data.",
 )
 
+parser.add_argument(
+    "--seed",
+    type=int,
+    default=1,
+    help="Random seed for reproducibility.",
+)
+
+parser.add_argument(
+    "--force",
+    action="store_true",
+    help="Force overwrite of existing output file.",
+)
+
+
 def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
                       lr=0.002, seed=1,
                       data_collection_interval=50, num_collections=-1, path="./collection.json",
-                      model=None, neuron_cap=48):
+                      model=None, neuron_cap=48, force=False):
     """
     Train a CNN model on MNIST and collect data at specified intervals.
 
@@ -67,7 +81,7 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
         data_collection_interval: Collect data every N batches
         num_collections: Number of data collections to make, -1 to collect until the end
     """
-    if os.path.exists(path):
+    if os.path.exists(path) and not force:
         print(f"File {path} already exists. Skipping training...")
         return
     torch.manual_seed(seed)
@@ -124,12 +138,10 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
                       f"at step {batch_idx + 1 + epoch * len(train_loader)}")
                 sample_image, target = next(test_iterator)
                 sample_image = sample_image.to(device)
-                target = torch.tensor(target, dtype=torch.int64, device=device)
                 output = collector(sample_image, input=sample_image[0])
                 prediction = output.argmax(dim=1).item()
-                prediction_label = test_dataset.classes[prediction]
                 collector.register_value("prediction", prediction)
-                collector.register_value("label", prediction_label)
+                collector.register_value("label", f"Class {target.item()}, label {test_dataset.classes[target.item()]}")
                 collector.register_value("logits", output[0])
                 accuracy = acc.compute()
                 collector.register_value("loss", avg_loss / (batch_idx + 1 + epoch * len(train_loader)))
@@ -193,6 +205,7 @@ def get_mnist():
     test_dataset = datasets.MNIST('./data', train=False, transform=transform)
     return train_dataset, test_dataset
 
+
 def get_fashion_mnist():
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -201,6 +214,7 @@ def get_fashion_mnist():
     train_dataset = datasets.FashionMNIST('./data', train=True, download=True, transform=transform)
     test_dataset = datasets.FashionMNIST('./data', train=False, download=True, transform=transform)
     return train_dataset, test_dataset
+
 
 def get_stl10():
     transform = transforms.Compose([
@@ -221,6 +235,8 @@ if __name__ == "__main__":
     interval = args.interval
     neuron_cap = args.neuron_cap
     output_path = args.output_path
+    seed = args.seed
+    force = args.force
 
     print(f"Selected Dataset: {dataset}")
     print(f"Selected Model: {model_name}")
@@ -257,8 +273,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Train and collect data
-    train_and_collect(path=current_output_path, train_dataset=train_dataset,test_dataset=test_dataset,model=model,
-                        epochs=epochs, data_collection_interval=interval, neuron_cap=neuron_cap)
+    train_and_collect(path=current_output_path, train_dataset=train_dataset, test_dataset=test_dataset, model=model,
+                      epochs=epochs, data_collection_interval=interval, neuron_cap=neuron_cap, seed=seed, force=force)
 
     # Visualize collected data
     visualize_collected_data(current_output_path)
