@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
                              QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem,
                              QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel,
-                             QGraphicsRectItem, QSizePolicy)
+                             QGraphicsRectItem, QSizePolicy, QStyleOptionSlider, QToolTip, QStyle)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtCore import Qt, QPointF
+from PyQt6.QtCore import Qt, QPointF, QTimer, QPoint
 from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap, QIcon
 import pyqtgraph as pg
 import qdarktheme
@@ -37,14 +37,13 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
         self.setAcceptHoverEvents(True)
 
         self.layer_idx = layer_idx
-        self.neuron_idx_in_layer = neuron_idx_in_layer  # For easier identification
+        self.neuron_idx_in_layer = neuron_idx_in_layer
         self.visualizer_ref = visualizer_ref
 
         self.original_neuron_pen = QPen()
         self.original_neuron_brush = QBrush()
         self.state = HoverableNeuronItem.STATE_DEFAULT
 
-        # --- Appearance Config ---
         self.highlight_neuron_pen = QPen(QColor("black"), 3, Qt.PenStyle.SolidLine)
 
     def store_initial_appearance(self):
@@ -109,9 +108,7 @@ class MLPVisualizer(QMainWindow):
         self.current_pass = "1"
         self.max_pass = 1
         self._initial_fit_done = False
-        self.all_metrics_data = []  # Stores tuples: (pass_num, loss, accuracy)
-        self._all_neuron_items = []  # Flat list of all HoverableNeuronItem instances
-        self._all_connection_lines = []
+        self.all_metrics_data = []
         self.setup_ui()
 
         # Load data if path is provided
@@ -151,14 +148,6 @@ class MLPVisualizer(QMainWindow):
         # Zoom buttons
         self.controls_layout.addWidget(QPushButton("Zoom In", clicked=self.zoom_in))
         self.controls_layout.addWidget(QPushButton("Zoom Out", clicked=self.zoom_out))
-        # self.controls_layout.addStretch(1)
-
-        # Architecture label
-        self.architecture_label = QLabel()
-        label_font = QFont()
-        label_font.setPointSize(12)
-        self.architecture_label.setFont(label_font)
-        self.controls_layout.addWidget(self.architecture_label)
 
         # Content layout
         self.content_layout = QHBoxLayout()
@@ -216,6 +205,43 @@ class MLPVisualizer(QMainWindow):
         plot_panel_container.setMaximumHeight(250)  # Set min height for the plot area
         self.main_layout.addWidget(plot_panel_container, stretch=1)
 
+        # Animation panel
+        self.animation_timer = QTimer(self)
+        self.is_playing = False
+        self.animation_delay_ms = 1000
+        self.animation_timer.timeout.connect(self.advance_pass)
+
+        self.play_pause_button = QPushButton("▶ Play")
+        self.play_pause_button.setFixedWidth(80)
+        self.play_pause_button.clicked.connect(self.toggle_play_pause)
+        self.controls_layout.addWidget(self.play_pause_button)
+
+        self.stop_button = QPushButton("■ Stop")
+        self.stop_button.setFixedWidth(80)
+        self.stop_button.clicked.connect(self.stop_animation)
+        self.controls_layout.addWidget(self.stop_button)
+
+        self.controls_layout.addWidget(QLabel("Delay (ms):"))
+        self.delay_slider = QSlider(Qt.Orientation.Horizontal)
+        self.delay_slider.setMinimum(200)  # Min delay 200ms
+        self.delay_slider.setMaximum(2000)  # Max delay 2 seconds
+        self.delay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.delay_slider.setTickInterval(100)
+        self.delay_slider.setValue(self.animation_delay_ms)  # Set initial value from __init__
+        self.delay_slider.setToolTip(f"{self.delay_slider.value()} ms")
+        self.delay_slider.valueChanged.connect(self.update_timer_interval)
+        self.delay_slider.sliderMoved.connect(self.show_delay_tooltip)
+        self.delay_slider.setFixedWidth(150)  # Fixed width for delay slider
+        self.controls_layout.addWidget(self.delay_slider)
+        self.update_animation_controls_state(enabled=False)
+
+        # Architecture label
+        self.architecture_label = QLabel()
+        label_font = QFont()
+        label_font.setPointSize(12)
+        self.architecture_label.setFont(label_font)
+        self.controls_layout.addWidget(self.architecture_label)
+
     def load_data(self, json_path):
         """Load the collected MLP data from a JSON file."""
         try:
@@ -230,6 +256,7 @@ class MLPVisualizer(QMainWindow):
                 self.pass_slider.setValue(1)
                 self.current_pass = "1"
                 self.pass_display_label.setText(f"Pass: {self.current_pass}/{self.max_pass}")
+                self.update_animation_controls_state(enabled=True)
 
                 for pass_num_int in numeric_passes:
                     pass_num_str = str(pass_num_int)
@@ -258,6 +285,7 @@ class MLPVisualizer(QMainWindow):
                 self.pass_slider.setMaximum(1)
                 self.pass_slider.setValue(1)
                 self.pass_display_label.setText("Pass: 1/1")
+                self.update_animation_controls_state(enabled=False)
         except Exception as e:
             print(f"Error loading data: {e}")
             self.data = None  # Ensure data is None if loading fails
@@ -266,6 +294,7 @@ class MLPVisualizer(QMainWindow):
             self.pass_slider.setMaximum(1)
             self.pass_slider.setValue(1)
             self.pass_display_label.setText("Pass: N/A")
+            self.update_animation_controls_state(enabled=False)
 
     def update_plot(self):
         if not self.all_metrics_data:
@@ -299,6 +328,103 @@ class MLPVisualizer(QMainWindow):
         self.visualize_network(preserve_current_view=self._initial_fit_done)
         self.update_plot()
 
+    def toggle_play_pause(self):
+        """Starts or pauses the animation timer."""
+        if not self.data or self.max_pass <= 1:  # Don't play if no data or only 1 pass
+            return
+
+        if self.is_playing:
+            self.animation_timer.stop()
+            self.is_playing = False
+            self.play_pause_button.setText("▶ Play")
+            self.play_pause_button.setToolTip("Play Animation")
+        else:
+            # Set interval just before starting, based on current slider value
+            self.animation_delay_ms = self.delay_slider.value()
+            self.animation_timer.setInterval(self.animation_delay_ms)
+            self.animation_timer.start()
+            self.is_playing = True
+            self.play_pause_button.setText("❚❚ Pause")  # Pause symbol
+            self.play_pause_button.setToolTip("Pause Animation")
+
+    def stop_animation(self):
+        """Stops the animation timer and resets the pass slider to 1."""
+        if self.animation_timer.isActive():
+            self.animation_timer.stop()
+        self.is_playing = False
+        self.play_pause_button.setText("▶ Play")
+        self.play_pause_button.setToolTip("Play Animation")
+        # Reset slider to the beginning - this triggers change_pass -> visualize_network
+        self.pass_slider.setValue(1)
+
+    def closeEvent(self, event):
+        """Ensure timer stops when window closes."""
+        if self.animation_timer.isActive():
+            self.animation_timer.stop()
+        super().closeEvent(event)
+
+    def advance_pass(self):
+        """Increments the pass slider, looping back to 1 if at the end."""
+        if not self.is_playing:  # Should not happen if timer is stopped, but good check
+            return
+
+        current_val = self.pass_slider.value()
+        max_val = self.pass_slider.maximum()
+
+        if current_val < max_val:
+            next_val = current_val + 1
+        else:
+            next_val = 1  # Loop back to the beginning
+
+        self.pass_slider.setValue(next_val)  # Triggers visualization update via change_pass
+
+    def update_timer_interval(self, value):
+        """Updates the timer interval based on the delay slider."""
+        self.animation_delay_ms = value
+        # If timer is running, update its interval immediately
+        if self.animation_timer.isActive():
+            self.animation_timer.setInterval(self.animation_delay_ms)
+
+    def show_delay_tooltip(self, value):
+        """Shows a tooltip with the current value near the slider handle during drag."""
+        try:
+            # Get the style option for the slider
+            opt = QStyleOptionSlider()
+            self.delay_slider.initStyleOption(opt)
+
+            # Get the rectangle of the slider handle
+            handle_rect = self.delay_slider.style().subControlRect(
+                QStyle.ComplexControl.CC_Slider,
+                opt,
+                QStyle.SubControl.SC_SliderHandle,
+                self.delay_slider
+            )
+
+            # Calculate a position slightly above the handle's center
+            # Map the handle's center point to global screen coordinates
+            tooltip_pos = self.delay_slider.mapToGlobal(
+                handle_rect.center() + QPoint(0, -25))  # Adjust offset as needed
+
+            # Show the tooltip
+            QToolTip.showText(tooltip_pos, f"<font color='#000000'>{value} ms</font>", self.delay_slider, handle_rect)
+
+        except Exception as e:
+            print(f"Error calculating tooltip position: {e}")
+
+    def update_animation_controls_state(self, enabled=True):
+        """Enable or disable animation controls."""
+        # Only enable if there's more than one pass
+        actual_enabled_state = enabled and (self.max_pass > 1)
+
+        self.play_pause_button.setEnabled(actual_enabled_state)
+        self.stop_button.setEnabled(actual_enabled_state)
+        self.delay_slider.setEnabled(actual_enabled_state)
+
+        # Reset play button text if disabled
+        if not actual_enabled_state and not self.is_playing:
+            self.play_pause_button.setText("▶ Play")
+            self.play_pause_button.setToolTip("Play Animation")
+
     def zoom_in(self):
         """Zoom in the view."""
         self.view.scale(1.2, 1.2)
@@ -315,8 +441,8 @@ class MLPVisualizer(QMainWindow):
 
         # Clear the scene
         self.scene.clear()
-        self._all_neuron_items.clear()
-        self._all_connection_lines.clear()
+        self._all_neuron_items = []
+        self._all_connection_lines = []
         architecture = self.data.get("architecture", {})
 
         # Identify and sort layers by their index
