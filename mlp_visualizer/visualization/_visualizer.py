@@ -1,10 +1,12 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
                              QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsTextItem,
-                             QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel, QGraphicsRectItem)
+                             QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QSlider, QLabel,
+                             QGraphicsRectItem, QSizePolicy)
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPen, QColor, QBrush, QPainter, QFont, QImage, QPixmap, QIcon
 import pyqtgraph as pg
+import qdarktheme
 import sys
 import json
 import numpy as np
@@ -139,30 +141,51 @@ class MLPVisualizer(QMainWindow):
         self.pass_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.pass_slider.setTickInterval(1)
         self.pass_slider.valueChanged.connect(self.change_pass)
-        self.controls_layout.addWidget(self.pass_slider)
+        self.pass_slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.controls_layout.addWidget(self.pass_slider, 1)
 
         # Pass label
         self.pass_display_label = QLabel("Pass: 1/1")  # Initial text
         self.controls_layout.addWidget(self.pass_display_label)
 
         # Zoom buttons
-        self.controls_layout.addWidget(QPushButton("Zoom Out", clicked=self.zoom_out))
         self.controls_layout.addWidget(QPushButton("Zoom In", clicked=self.zoom_in))
-        self.controls_layout.addStretch(1)
+        self.controls_layout.addWidget(QPushButton("Zoom Out", clicked=self.zoom_out))
+        # self.controls_layout.addStretch(1)
+
+        # Architecture label
+        self.architecture_label = QLabel()
+        label_font = QFont()
+        label_font.setPointSize(12)
+        self.architecture_label.setFont(label_font)
+        self.controls_layout.addWidget(self.architecture_label)
 
         # Content layout
         self.content_layout = QHBoxLayout()
         self.main_layout.addLayout(self.content_layout)
 
         # Image display
+        image_and_label_layout = QVBoxLayout()
+        image_and_label_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label = QLabel()
         self.image_label.setFixedSize(200, 200)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.content_layout.addWidget(self.image_label)
+        image_and_label_layout.addWidget(self.image_label)
+        self.true_label_display = QLabel("")
+        self.true_label_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label_font = QFont()
+        label_font.setPointSize(10)  # Adjust size as needed
+        self.true_label_display.setFont(label_font)
+        image_and_label_layout.addWidget(self.true_label_display)
+
+        image_container_widget = QWidget()  # Create a widget to hold this new layout
+        image_container_widget.setLayout(image_and_label_layout)
+        image_container_widget.setFixedWidth(220)  # Adjust width to accommodate label
+        self.content_layout.addWidget(image_container_widget)
 
         # Scene and view setup
         self.scene = QGraphicsScene()
-        self.scene.setBackgroundBrush(QBrush(Qt.GlobalColor.darkGray))
+        self.scene.setBackgroundBrush(QBrush(Qt.GlobalColor.black))
         self.view = ZoomableGraphicsView(self.scene)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -192,13 +215,6 @@ class MLPVisualizer(QMainWindow):
         plots_hbox_layout.addWidget(self.accuracy_plot_widget)
         plot_panel_container.setMaximumHeight(250)  # Set min height for the plot area
         self.main_layout.addWidget(plot_panel_container, stretch=1)
-
-        self.architecture_label = QLabel()
-        label_font = QFont()
-        label_font.setPointSize(12)
-        self.architecture_label.setFont(label_font)
-        self.controls_layout.addWidget(self.architecture_label)
-        self.controls_layout.addStretch(1)
 
     def load_data(self, json_path):
         """Load the collected MLP data from a JSON file."""
@@ -407,6 +423,7 @@ class MLPVisualizer(QMainWindow):
                     # Label for the bar (class index)
                     label = QGraphicsTextItem(str(i))
                     label.setFont(hist_bar_font)
+                    label.setDefaultTextColor(QColor(Qt.GlobalColor.white))
                     label_x_pos = current_hist_x + hist_bar_width / 2 - label.boundingRect().width() / 2
                     label_y_pos = y_hist_baseline + 2  # Just below the baseline
                     label.setPos(label_x_pos, label_y_pos)
@@ -438,13 +455,12 @@ class MLPVisualizer(QMainWindow):
 
                 # --- Prediction Text (position below histogram) ---
                 prediction_text_content = f"Prediction: {prediction}"
-                prediction_text_item = QGraphicsTextItem(
-                    prediction_text_content)  # Create item to measure its width
+                prediction_text_item = QGraphicsTextItem(prediction_text_content)
+                prediction_text_item.setDefaultTextColor(QColor(Qt.GlobalColor.white))
                 pred_font = QFont()
                 pred_font.setBold(True)
                 pred_font.setPointSize(12)
                 prediction_text_item.setFont(pred_font)
-                prediction_text_item.setDefaultTextColor(QColor(Qt.GlobalColor.black))
 
                 y_pred_text = y_hist_baseline + 2 + QGraphicsTextItem(str(0)).boundingRect().height() + 10
 
@@ -660,6 +676,7 @@ class MLPVisualizer(QMainWindow):
                 ind += 1
 
                 label = QGraphicsTextItem(layer_key)
+                label.setDefaultTextColor(QColor(Qt.GlobalColor.white))
                 label.setFont(title_font)
                 label.setPos(x, y)
                 self.scene.addItem(label)
@@ -672,6 +689,9 @@ class MLPVisualizer(QMainWindow):
         image_data = self.data[self.current_pass].get("input")
         if image_data is None:
             return
+        true_label = self.data[self.current_pass].get("label")
+        if true_label:
+            self.true_label_display.setText(true_label)
 
         image_array_float = np.array(image_data, dtype=np.float32)
 
@@ -732,13 +752,19 @@ def visualize_mlp(json_path):
     icon_path = "resources/favicon.ico"
     icon = QIcon(icon_path)
 
+    # Dark theme setup without changes to QSlider
+    original_stylesheet = qdarktheme.load_stylesheet()
+    start_pos = original_stylesheet.find("QSlider {")
+    next_section_pos = original_stylesheet.find("QTabWidget::", start_pos)
+    modified_stylesheet = original_stylesheet[:start_pos] + original_stylesheet[next_section_pos:]
+    app.setStyleSheet(modified_stylesheet)
+
     app.setWindowIcon(icon)
     visualizer = MLPVisualizer(json_path)
     visualizer.setWindowIcon(icon)
     visualizer.show()
 
     sys.exit(app.exec())
-
 
 
 if __name__ == "__main__":
