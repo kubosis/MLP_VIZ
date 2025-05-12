@@ -55,7 +55,7 @@ parser.add_argument(
 parser.add_argument(
     "--seed",
     type=int,
-    default=1,
+    default=None,
     help="Random seed for reproducibility.",
 )
 
@@ -67,7 +67,7 @@ parser.add_argument(
 
 
 def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
-                      lr=0.002, seed=1,
+                      lr=0.002, seed=None,
                       data_collection_interval=50, num_collections=-1, path="./collection.json",
                       model=None, neuron_cap=48, force=False):
     """
@@ -84,8 +84,9 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
     if os.path.exists(path) and not force:
         print(f"File {path} already exists. Skipping training...")
         return
-    torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
+    if seed:
+        torch.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training model on {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'} with seed {seed}")
 
@@ -140,8 +141,8 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
                 sample_image = sample_image.to(device)
                 output = collector(sample_image, input=sample_image[0])
                 prediction = output.argmax(dim=1).item()
-                collector.register_value("prediction", prediction)
-                collector.register_value("label", f"Class {target.item()}, label {test_dataset.classes[target.item()]}")
+                collector.register_value("prediction", (prediction, test_dataset.classes[prediction]))
+                collector.register_value("true_label", (target.item(), test_dataset.classes[target.item()]))
                 collector.register_value("logits", output[0])
                 accuracy = acc.compute()
                 collector.register_value("loss", avg_loss / (batch_idx + 1 + epoch * len(train_loader)))

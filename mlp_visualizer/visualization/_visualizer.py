@@ -508,7 +508,7 @@ class MLPVisualizer(QMainWindow):
 
         if all_layers and self.current_pass in self.data:
             if 'prediction' in self.data[self.current_pass] and 'logits' in self.data[self.current_pass]:
-                prediction = self.data[self.current_pass]['prediction']
+                prediction, prediction_label = self.data[self.current_pass]['prediction']
 
                 # --- Histogram Drawing ---
                 # 1. Calculate Softmax probabilities
@@ -580,7 +580,7 @@ class MLPVisualizer(QMainWindow):
                             self.scene.addItem(line)
 
                 # --- Prediction Text (position below histogram) ---
-                prediction_text_content = f"Prediction: {prediction}"
+                prediction_text_content = f"Class {prediction}: {prediction_label} with prob. {probabilities[prediction]:.2f}"
                 prediction_text_item = QGraphicsTextItem(prediction_text_content)
                 prediction_text_item.setDefaultTextColor(QColor(Qt.GlobalColor.white))
                 pred_font = QFont()
@@ -815,9 +815,9 @@ class MLPVisualizer(QMainWindow):
         image_data = self.data[self.current_pass].get("input")
         if image_data is None:
             return
-        true_label = self.data[self.current_pass].get("label")
+        true_class, true_label = self.data[self.current_pass].get("true_label")
         if true_label:
-            self.true_label_display.setText(true_label)
+            self.true_label_display.setText(f"Class {true_class}: {true_label}")
 
         image_array_float = np.array(image_data, dtype=np.float32)
 
