@@ -150,7 +150,6 @@ def train_and_collect(train_dataset, test_dataset, batch_size=64, epochs=1,
 
                 model.train()
                 collections_made += 1
-        acc.reset()
     print(f'Epoch: {epochs}/{epochs} [{len(train_loader.dataset)}/{len(train_loader.dataset)} (100%)]')
 
     # Save the collected data
