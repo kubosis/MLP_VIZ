@@ -1,18 +1,18 @@
 # MLP Activation & Weight Visualizer
 
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 An interactive tool built with PyTorch and PyQt6 to visualize the internal dynamics (activations, weights) of Multi-Layer Perceptron (MLP) classification heads during training.
 
-**[Insert Screenshot or GIF of the Visualizer in Action Here]**
+![UI](https://github.com/user-attachments/assets/204d5e52-9d18-4953-9274-4c7ccebc72b3)
 *Figure 1: The MLP Visualizer interface showing network state, input, predictions, and metrics.*
 
 ## Features
 
-*   **Data Collection Backend:** Integrates with PyTorch models using hooks to capture activations, weights, (and optionally gradients) from Linear layers. (`_collector_module.py`)
+*   **Data Collection Backend:** Integrates with PyTorch models using hooks to capture activations, weights, (and optionally gradients) from Linear layers. (`_collector_module.py`, see its [ReadME here](https://github.com/kubosis/VIZ_project/tree/main/mlp_visualizer/torch_collector))
 *   **Data Reduction:** Intelligently caps and reduces data from large layers to keep visualization feasible.
-*   **Interactive Frontend:** Visualizes the collected data using PyQt6 and pyqtgraph. (`_visualizer.py`)
+*   **Interactive Frontend:** Visualizes the collected data using PyQt6 and pyqtgraph. (`_visualizer.py`, see its [ReadME here](https://github.com/kubosis/VIZ_project/tree/main/mlp_visualizer/visualization))
 *   **Dynamic Network View:**
     *   Neurons colored by activation value (diverging blue-white-red scale).
     *   Connections colored by weight sign (red/blue) and sized by magnitude.
@@ -38,7 +38,7 @@ Neural networks are often treated as "black boxes". This tool aims to provide in
 ## Project Structure
 ```
 .
-├── _collector_module.py # PyTorch data collection logic, see its ReadME here
+├── _collector_module.py # PyTorch data collection logic
 ├── _visualizer.py # PyQt6 visualization GUI, see its ReadME here
 ├── main.py # Main script for training and launching visualization
 ├── models.py # PyTorch model definitions
@@ -106,7 +106,7 @@ The primary way to use the tool is via `main.py`.
 
 *   **Visualization Scalability:** Very wide MLP layers might still appear cluttered despite data capping.
 *   **Gradient Visualization:** Currently visualizes weights; visualizing gradients is planned future work.
-*   **Performance:** Loading/parsing very large JSON files (many passes/large networks) might take time.
+*   **Performance:** Loading/parsing huge JSON files (many passes) might take time.
 
 ## Future Work
 
