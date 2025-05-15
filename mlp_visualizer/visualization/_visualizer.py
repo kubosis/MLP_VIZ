@@ -76,9 +76,9 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
             self.setBrush(self.original_neuron_brush)
 
 
-def get_diverging_neuron_color(activation_value):
+def get_diverging_neuron_color(activation_value, max_val=1.):
     """Maps an activation value to a diverging color scheme (blue-white-red)."""
-    normalized_value = np.clip(activation_value, -1.0, 1.0)  # Clip to a reasonable range
+    normalized_value = np.clip(activation_value, -1, 1) / max_val # Clip to a reasonable range
 
     if normalized_value >= 0:
         # Map [0, 1] to [white, red]
@@ -628,6 +628,15 @@ class MLPVisualizer(QMainWindow):
         scene_rect = self.view.rect()
         available_height = scene_rect.height()
 
+        act_vals = self.get_act_values(linear_layers)
+        if act_vals:
+            act_min = max(-1., min(act_vals))
+            act_max = min(1., max(act_vals))
+            thr = max(abs(act_min), abs(act_max))
+            print(thr)
+        else:
+            thr = 1.
+
         for layer_idx, layer_size in enumerate(layer_sizes):
             layer_neurons_with_pos = []  # For the return structure
             x = layer_idx * layer_spacing + 100
@@ -641,7 +650,7 @@ class MLPVisualizer(QMainWindow):
 
                 activation_value = self.get_activation_value(layer_idx, neuron_idx, linear_layers)
                 if activation_value is not None:
-                    color = get_diverging_neuron_color(activation_value)
+                    color = get_diverging_neuron_color(activation_value, thr)
                     neuron_item.setBrush(QBrush(color))
                 else:
                     neuron_item.setBrush(QBrush(QColor(200, 200, 200)))
@@ -677,6 +686,15 @@ class MLPVisualizer(QMainWindow):
             return layer_data['input'][neuron_idx]
 
         return None
+
+    def get_act_values(self, linear_layers):
+        layer_keys = [l[0] for l in linear_layers]
+        if self.current_pass not in self.data:
+            return None
+        layer_data = []
+        for layer_key in layer_keys:
+            layer_data.extend(self.data[self.current_pass].get(layer_key, {'input': []})['input'])
+        return layer_data
 
     def draw_connections(self, structured_neurons, linear_layers):  # Takes the output of create_neurons
         """Draw connections (weights) between neurons."""
