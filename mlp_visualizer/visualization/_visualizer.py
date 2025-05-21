@@ -30,7 +30,7 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
     STATE_HIGHLIGHTED = 1
     STATE_SIBLING_OF_HOVERED = 2  # Neuron is in same layer as a hovered one, but not hovered itself
     highlighted_connection_z_value = 1  # Z-value for connections of the HOVERED neuron
-    dimmed_connection_alpha = 5  # Alpha for connections of OTHER neurons in the SAME layer
+    dimmed_connection_alpha = 48  # Alpha for connections of OTHER neurons in the SAME layer
 
     def __init__(self, layer_idx, neuron_idx_in_layer, visualizer_ref, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -44,7 +44,7 @@ class HoverableNeuronItem(QGraphicsEllipseItem):
         self.original_neuron_brush = QBrush()
         self.state = HoverableNeuronItem.STATE_DEFAULT
 
-        self.highlight_neuron_pen = QPen(QColor("black"), 3, Qt.PenStyle.SolidLine)
+        self.highlight_neuron_pen = QPen(QColor("yellow"), 2, Qt.PenStyle.SolidLine)
 
     def store_initial_appearance(self):
         self.original_neuron_pen = self.pen()
@@ -452,8 +452,8 @@ class MLPVisualizer(QMainWindow):
         linear_layers = [(k, v) for k, v in all_layers if "Linear" in k]
 
         neuron_radius = 20
-        layer_spacing = 200
-        neuron_spacing = 70
+        layer_spacing = 300
+        neuron_spacing = 80
 
         layer_sizes = []
         for i, (layer_key, layer_info) in enumerate(linear_layers):
@@ -709,6 +709,7 @@ class MLPVisualizer(QMainWindow):
             current_pass_data = self.data.get(self.current_pass, {})
             layer_data = current_pass_data.get(layer_key, {})
             weight_matrix = layer_data.get("weight", [])
+            weight_metrix_max_abs = np.max(np.abs(weight_matrix)) if weight_matrix else None
 
             if weight_matrix:
                 # Ensure neuron lists for current and next layer are not empty
@@ -720,10 +721,10 @@ class MLPVisualizer(QMainWindow):
                         if to_idx < len(weight_matrix) and from_idx < len(weight_matrix[to_idx]):
                             weight = weight_matrix[to_idx][from_idx]
                             weight_abs = abs(weight)
-                            thickness = max(0.5, min(3.5, weight_abs * 3.5))
+                            thickness = max(0.5, min(10, weight_abs * 10))
                             # Line colors: Red for positive, Blue for negative
-                            line_color_tuple = (255, 0, 0, min(255, int(weight_abs * 180) + 70)) if weight >= 0 \
-                                else (0, 0, 255, min(255, int(weight_abs * 180) + 70))
+                            line_color_tuple = (255, 0, 0, min(255, int(weight_abs / weight_metrix_max_abs * 255) + 32)) if weight >= 0 \
+                                else (0, 0, 255, min(255, int(weight_abs / weight_metrix_max_abs * 255) + 32))
                             color = QColor(*line_color_tuple)
 
                             # Get HoverableNeuronItem instances
@@ -777,7 +778,10 @@ class MLPVisualizer(QMainWindow):
 
             # If either connected neuron is part of the main highlighted path
             if is_part_of_highlighted_path:
-                line.setPen(original_pen)
+                orig_color = original_pen.color()
+                orig_color.setAlpha(255)  # Fully opaque
+                highlight_pen = QPen(orig_color, original_pen.widthF())
+                line.setPen(highlight_pen)
                 line.setZValue(HoverableNeuronItem.highlighted_connection_z_value)
             # If source is a sibling (and target is not highlighted, implies connection to next layer)
             # OR if target is a sibling (and source is not highlighted, implies connection from prev layer)
