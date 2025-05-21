@@ -1,1 +1,0 @@
-from ._collector_module import ModelCollector
