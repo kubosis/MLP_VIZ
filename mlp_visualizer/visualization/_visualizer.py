@@ -452,7 +452,7 @@ class MLPVisualizer(QMainWindow):
         linear_layers = [(k, v) for k, v in all_layers if "Linear" in k]
 
         neuron_radius = 20
-        layer_spacing = 300
+        layer_spacing = 500
         neuron_spacing = 80
 
         layer_sizes = []
@@ -633,7 +633,6 @@ class MLPVisualizer(QMainWindow):
             act_min = max(-1., min(act_vals))
             act_max = min(1., max(act_vals))
             thr = max(abs(act_min), abs(act_max))
-            print(thr)
         else:
             thr = 1.
 
@@ -721,10 +720,10 @@ class MLPVisualizer(QMainWindow):
                         if to_idx < len(weight_matrix) and from_idx < len(weight_matrix[to_idx]):
                             weight = weight_matrix[to_idx][from_idx]
                             weight_abs = abs(weight)
-                            thickness = max(0.5, min(10, weight_abs * 10))
+                            thickness = max(0.5, min(8, weight_abs / weight_metrix_max_abs * 8))
                             # Line colors: Red for positive, Blue for negative
-                            line_color_tuple = (255, 0, 0, min(255, int(weight_abs / weight_metrix_max_abs * 255) + 32)) if weight >= 0 \
-                                else (0, 0, 255, min(255, int(weight_abs / weight_metrix_max_abs * 255) + 32))
+                            line_color_tuple = (255, 0, 0, min(255, int(weight_abs / weight_metrix_max_abs * 255 / 1.2))) if weight >= 0 \
+                                else (0, 0, 255, min(255, int(weight_abs / weight_metrix_max_abs * 255 / 1.2)))
                             color = QColor(*line_color_tuple)
 
                             # Get HoverableNeuronItem instances
