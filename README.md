@@ -5,6 +5,8 @@
 
 An interactive tool built with PyTorch and PyQt6 to visualize the internal dynamics (activations, weights) of Multi-Layer Perceptron (MLP) classification heads during training.
 
+For the full project description, check out our project report: [PDF](https://github.com/user-attachments/files/20370004/VIZ.-.projekt.pdf).
+
 ![UI](https://github.com/user-attachments/assets/204d5e52-9d18-4953-9274-4c7ccebc72b3)
 *Figure 1: The MLP Visualizer interface showing network state, input, predictions, and metrics.*
 
