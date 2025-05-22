@@ -8,6 +8,29 @@ An interactive tool built with PyTorch and PyQt6 to visualize the internal dynam
 ![UI](https://github.com/user-attachments/assets/204d5e52-9d18-4953-9274-4c7ccebc72b3)
 *Figure 1: The MLP Visualizer interface showing network state, input, predictions, and metrics.*
 
+## Usage
+```
+usage: main.py [-h] [--dataset {mnist,cifar10,fashion_mnist}] [--model {cnn,cnn_large,cifar10_cnn}] [--epochs EPOCHS] [--interval INTERVAL] [--neuron_cap NEURON_CAP] [--output_path OUTPUT_PATH] [--seed SEED] [--force]
+
+Train and visualize neural network data.
+
+options:
+  -h, --help            show this help message and exit
+  --dataset {mnist,cifar10,fashion_mnist}
+                        Choose the dataset to use.
+  --model {cnn,cnn_large,cifar10_cnn}
+                        Choose the model architecture to use.
+  --epochs EPOCHS       Number of training epochs.
+  --interval INTERVAL   Data collection interval during training.
+  --neuron_cap NEURON_CAP
+                        Optional neuron cap for the model.
+  --output_path OUTPUT_PATH
+                        Optional path to save the collected data.
+  --seed SEED           Random seed for reproducibility.
+  --force               Force overwrite of existing output file.
+
+```
+
 ## Features
 
 *   **Data Collection Backend:** Integrates with PyTorch models using hooks to capture activations, weights, (and optionally gradients) from Linear layers. (`_collector_module.py`, see its [ReadME here](https://github.com/kubosis/VIZ_project/tree/main/mlp_visualizer/torch_collector))

@@ -64,7 +64,7 @@ class ModelCollector(nn.Module):
                 continue
             module_name, module_specs = _parse_module_str(str(module))
             module.tag = f"{reg_mod_count}_{module_name}"
-            self._state_dict["architecture"][module.tag] = self._cap_model_specs(module_specs)
+            self._state_dict["architecture"][module.tag] = module_specs
             reg_mod_count += 1
             if any([isinstance(module, cls) for cls in self._captured_instances]):
                 if self.register == "both" or self.register == "forward":

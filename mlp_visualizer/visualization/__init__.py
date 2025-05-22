@@ -1,1 +1,1 @@
-from ._visualizer import visualize_mlp
+from ._visualizer import MLPVisualizer, visualize_mlp
