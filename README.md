@@ -132,13 +132,6 @@ The primary way to use the tool is via `main.py`.
         python main.py --dataset cifar10 --model cifar10_cnn --epochs 10 --interval 50 --neuron_cap 32
         ```
 
-3.  **Visualize existing data:**
-    If you have already generated a `.json` file using the collector:
-    ```bash
-    python _visualizer.py path/to/your_collected_data.json
-    ```
-    *(Or use `python main.py --visualize_only path/to/your_collected_data.json` - you would need to add this argument parsing to `main.py`)*
-
 ## How it Works
 
 1.  **Collection:** `main.py` sets up the chosen model and dataset. It wraps the model with `ModelCollector`. During training, at specified intervals, a forward pass is run through the `collector` on a sample input. Hooks capture activations and weights. Custom values (loss, accuracy, label, prediction, logits, input image) are registered. The data is saved to JSON.
