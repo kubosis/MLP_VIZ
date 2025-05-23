@@ -1,6 +1,3 @@
-torch==2.6.0+cu126
-torchaudio==2.6.0+cu126
-torchvision==0.21.0+cu126
 PyQt6==6.9.0
 pyqtgraph==0.13.7
 torchmetrics==1.7.1
